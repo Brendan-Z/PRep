@@ -1,0 +1,27 @@
+{
+  "name": "prep",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "PRep — click a changed code block in a GitHub PR and get quizzed on what it does. Powered by Portkey.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "format": "prettier --write ."
+  },
+  "dependencies": {
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@crxjs/vite-plugin": "^2.0.0-beta.33",
+    "@eslint/js": "^10.0.1",
+    "@types/chrome": "^0.1.42",
+    "eslint": "^10.4.1",
+    "prettier": "^3.8.3",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.60.1",
+    "vite": "^5"
+  }
+}

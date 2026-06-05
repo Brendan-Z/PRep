@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>PRep</title>
+    <link rel="stylesheet" href="./popup.css" />
+  </head>
+  <body>
+    <p class="eyebrow">Portkey gateway</p>
+    <h1>PRep</h1>
+
+    <label for="baseUrl">Portkey URL</label>
+    <input type="text" id="baseUrl" placeholder="https://api.portkey.ai/v1" autocomplete="off" spellcheck="false" />
+
+    <label for="apiKey">API key</label>
+    <input type="password" id="apiKey" placeholder="your Portkey API key" autocomplete="off" />
+
+    <label for="model">Model</label>
+    <input type="text" id="model" placeholder="us.anthropic.claude-sonnet-4-6-..." autocomplete="off" spellcheck="false" />
+
+    <div class="row">
+      <button class="primary" id="save">Save</button>
+      <button id="test">Test connection</button>
+    </div>
+
+    <p id="status"></p>
+    <p class="note">Stored locally on this device only. Use a scoped Portkey key with a budget and rate limits, and rotate it.</p>
+
+    <script type="module" src="./popup.ts"></script>
+  </body>
+</html>

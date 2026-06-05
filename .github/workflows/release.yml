@@ -1,0 +1,27 @@
+name: Release
+
+# Tagging a commit with v* (e.g. v0.1.0) builds the extension, zips dist/, and
+# publishes a GitHub release with the zip attached.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+      - name: Zip extension
+        run: (cd dist && zip -r "../prep-${{ github.ref_name }}.zip" .)
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: prep-${{ github.ref_name }}.zip
+          generate_release_notes: true
