@@ -1,8 +1,8 @@
 import { defineManifest } from "@crxjs/vite-plugin";
 import pkg from "../package.json";
 
-// Typed MV3 manifest. CRXJS resolves the TS entry points below into built assets
-// and rewrites the icon paths. prep.png lives at the project root.
+// Typed MV3 manifest. CRXJS resolves the TS entry points below into built assets.
+// prep.png lives in public/ (Vite copies it verbatim to the dist root).
 export default defineManifest({
   manifest_version: 3,
   name: "PRep",
