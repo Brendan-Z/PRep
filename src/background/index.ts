@@ -1,0 +1,23 @@
+// Service worker entry — routes typed messages. The sync listener returns literal
+// `true` to keep the channel open for the async response.
+
+import { generateQuiz, testConnection } from "./quiz";
+import type { ExtensionRequest } from "../shared/messages";
+
+chrome.runtime.onMessage.addListener((message: ExtensionRequest, _sender, sendResponse) => {
+  if (message?.type === "GENERATE_QUIZ") {
+    generateQuiz(message.payload)
+      .then((quiz) => sendResponse({ ok: true, quiz }))
+      .catch((e: unknown) => {
+        const err = e as { message?: string; code?: string };
+        sendResponse({ ok: false, error: String(err?.message ?? e), code: err?.code });
+      });
+    return true;
+  }
+  if (message?.type === "TEST_KEY") {
+    testConnection().then(sendResponse);
+    return true;
+  }
+  // Not ours — let the channel close.
+  return false;
+});
