@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "description": "PRep — click a changed code block in a GitHub PR and get quizzed on what it does. Powered by Portkey.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Brendan-Z/PRep.git"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
@@ -17,9 +21,16 @@
   "devDependencies": {
     "@crxjs/vite-plugin": "^2.0.0-beta.33",
     "@eslint/js": "^10.0.1",
+    "@semantic-release/commit-analyzer": "^13.0.1",
+    "@semantic-release/exec": "^7.1.0",
+    "@semantic-release/git": "^10.0.1",
+    "@semantic-release/github": "^12.0.8",
+    "@semantic-release/npm": "^13.1.5",
+    "@semantic-release/release-notes-generator": "^14.1.1",
     "@types/chrome": "^0.1.42",
     "eslint": "^10.4.1",
     "prettier": "^3.8.3",
+    "semantic-release": "^25.0.3",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.60.1",
     "vite": "^5"

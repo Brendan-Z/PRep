@@ -45,6 +45,15 @@ The build emits one bundle per entry point — there is no shared global namespa
 ## CI / Release
 
 - **CI** (`.github/workflows/ci.yml`) runs lint + typecheck + build on every push to `main` and every PR.
-- **Release** (`.github/workflows/release.yml`) triggers on a `v*` tag: it builds, zips `dist/`, and publishes a GitHub release with the zip attached.
+- **Release** (`.github/workflows/release.yml`) runs **semantic-release** on every push to `main`. It reads the Conventional Commits since the last release, picks the next version, tags it, builds + zips `dist/`, publishes a GitHub release with the zip attached, and commits the `package.json` version bump back to `main`. **No manual tagging.**
 
-To cut a release: bump `version` in `package.json`, commit, then `git tag v0.1.0 && git push --tags`.
+Releases are fully driven by commit messages, so the convention is load-bearing:
+
+| Commit prefix | Effect |
+|---|---|
+| `fix:` | patch release (0.0.x) |
+| `feat:` | minor release (0.x.0) |
+| `feat!:` / `BREAKING CHANGE:` in body | major release (x.0.0) |
+| `chore:`, `docs:`, `ci:`, `refactor:`, etc. | no release |
+
+The manifest version comes from `package.json` (`src/manifest.config.ts` imports it), and semantic-release bumps `package.json` before the build — so the released zip always carries the right version.
