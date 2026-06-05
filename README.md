@@ -80,5 +80,11 @@ both the classic table view and the newer React view, detected at runtime).
 ## CI / Release
 
 - **CI** runs lint + typecheck + build on every push to `main` and every pull request.
-- **Release**: push a `v*` tag (e.g. `git tag v0.1.0 && git push --tags`) to build, zip `dist/`,
-  and publish a GitHub release with the packaged extension attached.
+- **Release** is automated with [semantic-release](https://semantic-release.gitbook.io/): merging
+  to `main` reads the [Conventional Commits](https://www.conventionalcommits.org/) since the last
+  release, decides the next version, tags it, builds + zips `dist/`, and publishes a GitHub release
+  with the packaged extension attached. No manual tagging.
+
+Because releases are driven by commit messages, **use Conventional Commits**: `fix:` → patch,
+`feat:` → minor, `feat!:` (or a `BREAKING CHANGE:` footer) → major. `chore:`/`docs:`/`ci:` don't
+trigger a release.
