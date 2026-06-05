@@ -1,27 +1,33 @@
 name: Release
 
-# Tagging a commit with v* (e.g. v0.1.0) builds the extension, zips dist/, and
-# publishes a GitHub release with the zip attached.
+# On every push to main (i.e. a merged PR), semantic-release inspects the
+# Conventional Commits since the last release, decides the next version, creates
+# the git tag + GitHub release, attaches the built+zipped extension, and commits
+# the version bump back to main. No manual tagging.
 on:
   push:
-    tags: ["v*"]
+    branches: [main]
 
 permissions:
-  contents: write
+  contents: write # create releases, tags, and push the version-bump commit
+  issues: write
+  pull-requests: write
 
 jobs:
   release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # semantic-release needs full history + tags
+          persist-credentials: true
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
-      - run: bun install --frozen-lockfile
-      - run: bun run build
-      - name: Zip extension
-        run: (cd dist && zip -r "../prep-${{ github.ref_name }}.zip" .)
-      - uses: softprops/action-gh-release@v2
+      - uses: actions/setup-node@v4
         with:
-          files: prep-${{ github.ref_name }}.zip
-          generate_release_notes: true
+          node-version: 20 # runtime for semantic-release; build still uses bun
+      - run: bun install --frozen-lockfile
+      - run: npx semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
