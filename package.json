@@ -1,6 +1,6 @@
 {
   "name": "prep",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "description": "PRep — click a changed code block in a GitHub PR and get quizzed on what it does. Powered by Portkey.",
