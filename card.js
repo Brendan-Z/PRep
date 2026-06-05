@@ -1,0 +1,255 @@
+// card.js — the minimal quiz UI.
+// Two absolutely-positioned elements appended to <body>, so GitHub's diff table
+// is NEVER mutated (which would break the React view's fixed table-layout):
+//   1. an overlay "box" drawn around the targeted hunk
+//   2. a Shadow-DOM card (CSS fully encapsulated, can't bleed in or out)
+//
+// Exposes PQ.card.open(rows, handlers) -> controller. Loaded before content.js.
+
+(function () {
+  const PQ = (globalThis.PQ = globalThis.PQ || {});
+
+  const HOST_ID = "pq-card-host";
+  const BOX_ID = "pq-box";
+
+  // xAI design language: near-black canvas, white-pill interactives, hairline
+  // borders, Inter for display/body + monospace uppercase eyebrows. Dark only
+  // (the brand has no light-mode counterpart). Quiz correctness needs a clear
+  // pass/fail cue the brand palette doesn't cover, so green/red tints are added
+  // sparingly — tuned to sit on the dark canvas.
+  const CSS = `
+    :host { all: initial; }
+    * { box-sizing: border-box; }
+    .card {
+      font: 400 14px/1.5 Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+      color: #ffffff; background: #0a0a0a;
+      border: 1px solid #212327; border-radius: 8px;
+      box-shadow: 0 8px 24px rgba(0,0,0,.5);
+      width: 460px; max-width: calc(100vw - 24px);
+      overflow: hidden;
+    }
+    .hd { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid #212327; }
+    .hd .dot { width: 8px; height: 8px; border-radius: 9999px; background: #ff7a17; flex: none; }
+    .hd .title {
+      font-family: ui-monospace, "Geist Mono", SFMono-Regular, Menlo, Monaco, monospace;
+      font-size: 12px; letter-spacing: 1.2px; text-transform: uppercase; color: #7d8187;
+    }
+    .hd .spacer { flex: 1; }
+    .hd .x { cursor: pointer; border: 1px solid #212327; background: transparent; color: #dadbdf; font-size: 15px; line-height: 1; width: 24px; height: 24px; border-radius: 9999px; }
+    .hd .x:hover { background: #1a1c20; color: #ffffff; }
+    .body { padding: 16px; }
+    .q { font-size: 16px; line-height: 24px; margin: 0 0 14px; color: #ffffff; }
+    .opts { display: flex; flex-direction: column; gap: 8px; }
+    .opt {
+      text-align: left; cursor: pointer; width: 100%;
+      padding: 10px 14px; border: 1px solid #212327; border-radius: 9999px;
+      background: transparent; color: #dadbdf; font: inherit; display: flex; gap: 10px; align-items: baseline;
+    }
+    .opt:hover:not(:disabled) { background: #1a1c20; border-color: #363a3f; color: #ffffff; }
+    .opt:disabled { cursor: default; }
+    .opt .key { font-family: ui-monospace, "Geist Mono", SFMono-Regular, Menlo, monospace; font-size: 13px; color: #7d8187; flex: none; }
+    .opt.correct { border-color: #3fb950; background: rgba(63,185,80,.10); color: #ffffff; }
+    .opt.correct .key { color: #3fb950; }
+    .opt.wrong { border-color: #f85149; background: rgba(248,81,73,.10); color: #ffffff; }
+    .opt.wrong .key { color: #f85149; }
+    .status { margin: 0 0 12px; font-size: 15px; }
+    .status.ok { color: #3fb950; }
+    .status.bad { color: #f85149; }
+    .explain { margin-top: 14px; padding: 14px; background: #191919; border: 1px solid #212327; border-radius: 8px; }
+    .explain h5 {
+      margin: 0 0 8px; font-weight: 400;
+      font-family: ui-monospace, "Geist Mono", SFMono-Regular, Menlo, monospace;
+      font-size: 12px; letter-spacing: 1.2px; text-transform: uppercase; color: #7d8187;
+    }
+    .explain p { margin: 0; white-space: pre-wrap; color: #dadbdf; }
+    .muted { color: #7d8187; }
+    .btn { cursor: pointer; padding: 8px 16px; border: 1px solid #212327; border-radius: 9999px; background: transparent; color: #ffffff; font: inherit; }
+    .btn:hover { background: #1a1c20; }
+    .btn.primary { background: #ffffff; border-color: #ffffff; color: #0a0a0a; }
+    .btn.primary:hover { background: #fafaf7; }
+    .row { display: flex; gap: 8px; align-items: center; }
+    .spinner { width: 14px; height: 14px; border: 2px solid #212327; border-top-color: #ffffff; border-radius: 50%; animation: pq-spin .7s linear infinite; flex: none; }
+    @keyframes pq-spin { to { transform: rotate(360deg); } }
+  `;
+
+  function escapeHtml(s) {
+    return String(s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function unionRect(rows) {
+    let top = Infinity, left = Infinity, right = -Infinity, bottom = -Infinity;
+    for (const r of rows) {
+      const b = r.getBoundingClientRect();
+      top = Math.min(top, b.top);
+      left = Math.min(left, b.left);
+      right = Math.max(right, b.right);
+      bottom = Math.max(bottom, b.bottom);
+    }
+    return { top, left, right, bottom };
+  }
+
+  function open(rows, handlers) {
+    handlers = handlers || {};
+    // Singleton: remove any prior card/box.
+    destroyExisting();
+
+    const box = document.createElement("div");
+    box.id = BOX_ID;
+    Object.assign(box.style, {
+      position: "absolute",
+      border: "2px solid #ff7a17",
+      borderRadius: "8px",
+      boxShadow: "0 0 0 4px rgba(255,122,23,.15)",
+      pointerEvents: "none",
+      zIndex: "9998",
+    });
+
+    const host = document.createElement("div");
+    host.id = HOST_ID;
+    Object.assign(host.style, { position: "absolute", zIndex: "9999" });
+    const root = host.attachShadow({ mode: "open" });
+    const style = document.createElement("style");
+    style.textContent = CSS;
+    const card = document.createElement("div");
+    card.className = "card";
+    root.append(style, card);
+
+    document.body.append(box, host);
+
+    function reposition() {
+      if (!rows.length) return;
+      const u = unionRect(rows);
+      const sx = window.scrollX, sy = window.scrollY;
+      box.style.top = u.top + sy - 2 + "px";
+      box.style.left = u.left + sx - 2 + "px";
+      box.style.width = u.right - u.left + 4 + "px";
+      box.style.height = u.bottom - u.top + 4 + "px";
+      // Card sits just below the box, aligned to its left.
+      host.style.top = u.bottom + sy + 8 + "px";
+      host.style.left = u.left + sx + "px";
+    }
+
+    let rafId = 0;
+    let destroyed = false;
+    function onScrollResize() {
+      if (destroyed || rafId) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = 0;
+        if (!destroyed) reposition();
+      });
+    }
+    window.addEventListener("scroll", onScrollResize, { passive: true, capture: true });
+    window.addEventListener("resize", onScrollResize, { passive: true });
+    // Rows can shift without a scroll/resize event (an inline comment opens, an
+    // adjacent file expands, fonts/images finish layout). Re-position on any body
+    // layout change so the box stays glued to the hunk.
+    const ro = new ResizeObserver(onScrollResize);
+    ro.observe(document.body);
+
+    function destroy() {
+      destroyed = true;
+      if (rafId) cancelAnimationFrame(rafId);
+      ro.disconnect();
+      window.removeEventListener("scroll", onScrollResize, { capture: true });
+      window.removeEventListener("resize", onScrollResize);
+      box.remove();
+      host.remove();
+    }
+
+    function header(title) {
+      return `<div class="hd"><span class="dot"></span><span class="title">${escapeHtml(title)}</span><span class="spacer"></span><button class="x" data-act="close" title="Close">×</button></div>`;
+    }
+
+    function wireClose() {
+      const x = card.querySelector('[data-act="close"]');
+      if (x) x.addEventListener("click", () => { destroy(); if (handlers.onClose) handlers.onClose(); });
+    }
+
+    const api = {
+      reposition,
+      destroy,
+
+      showLoading() {
+        card.innerHTML =
+          header("PRep") +
+          `<div class="body"><div class="row muted"><span class="spinner"></span><span>Generating a question…</span></div></div>`;
+        wireClose();
+        reposition();
+      },
+
+      showQuestion(quiz) {
+        const opts = quiz.options
+          .map((o, i) => `<button class="opt" data-index="${i}"><span class="key">${"ABCD"[i]}</span><span>${escapeHtml(o)}</span></button>`)
+          .join("");
+        card.innerHTML =
+          header("What does this code do?") +
+          `<div class="body"><p class="q">${escapeHtml(quiz.question)}</p><div class="opts">${opts}</div></div>`;
+        wireClose();
+        card.querySelectorAll(".opt").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const idx = Number(btn.dataset.index);
+            card.querySelectorAll(".opt").forEach((b) => (b.disabled = true));
+            if (handlers.onAnswer) handlers.onAnswer(idx);
+          });
+        });
+        reposition();
+      },
+
+      // result: { correct, chosenIndex, correctIndex, explanation }
+      showResult(result) {
+        const opts = card.querySelectorAll(".opt");
+        if (opts.length) {
+          opts.forEach((b) => (b.disabled = true));
+          if (opts[result.correctIndex]) opts[result.correctIndex].classList.add("correct");
+          if (!result.correct && opts[result.chosenIndex]) opts[result.chosenIndex].classList.add("wrong");
+        }
+        const body = card.querySelector(".body");
+        const prior = body.querySelector(".status");
+        if (prior) prior.remove();
+        const status = document.createElement("p");
+        status.className = "status " + (result.correct ? "ok" : "bad");
+        status.textContent = result.correct ? "✓ Correct" : "✗ Not quite";
+        body.insertBefore(status, body.firstChild);
+        // Explanation shown after every answer — right or wrong.
+        if (result.explanation) {
+          const ex = document.createElement("div");
+          ex.className = "explain";
+          ex.innerHTML = `<h5>Explanation</h5><p>${escapeHtml(result.explanation)}</p>`;
+          body.appendChild(ex);
+        }
+        reposition();
+      },
+
+      showError(message, canRetry) {
+        card.innerHTML =
+          header("PRep") +
+          `<div class="body"><p class="status bad">Couldn't generate a question.</p><p class="muted">${escapeHtml(message || "Unknown error")}</p>${canRetry ? `<div class="row" style="margin-top:10px"><button class="btn primary" data-act="retry">Retry</button></div>` : ""}</div>`;
+        wireClose();
+        const retry = card.querySelector('[data-act="retry"]');
+        if (retry) retry.addEventListener("click", () => handlers.onRetry && handlers.onRetry());
+        reposition();
+      },
+
+      showNeedsKey() {
+        card.innerHTML =
+          header("Setup needed") +
+          `<div class="body"><p>Set your Portkey API key to start quizzing.</p><p class="muted" style="margin-top:8px">Click the <b>PRep</b> icon in your browser toolbar to open settings.</p></div>`;
+        wireClose();
+        reposition();
+      },
+    };
+
+    return api;
+  }
+
+  function destroyExisting() {
+    document.getElementById(HOST_ID)?.remove();
+    document.getElementById(BOX_ID)?.remove();
+  }
+
+  PQ.card = { open, destroyExisting };
+})();
