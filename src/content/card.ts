@@ -11,6 +11,11 @@ import type { Quiz } from "../shared/quiz";
 const HOST_ID = "pq-card-host";
 const BOX_ID = "pq-box";
 
+// File-container selectors for both diff views (React "Files changed" + classic
+// table). Used to clamp the highlight box to the file's width — see reposition.
+const CONTAINER_SEL =
+  '[class^="Diff-module__diffTargetable"], .js-file, [data-tagsearch-path], .js-diff-table';
+
 export interface CardHandlers {
   onClose?: () => void;
   onRetry?: () => void;
@@ -148,16 +153,36 @@ export function openCard(rows: Element[], handlers: CardHandlers = {}): CardCont
 
   function reposition(): void {
     if (!rows.length) return;
-    const u = unionRect(rows);
+    const u = unionRect(rows); // viewport coordinates
     const sx = window.scrollX,
       sy = window.scrollY;
+    const vw = document.documentElement.clientWidth;
+    const vh = document.documentElement.clientHeight;
+
+    // Highlight box stays glued to the hunk, but its width is clamped to the
+    // file container (falling back to the viewport). A large diff whose code
+    // cell scrolls horizontally reports row rects far wider than the page, so
+    // without this clamp the box paints off the right edge of the page.
+    const container = rows[0].closest(CONTAINER_SEL);
+    const cb = container?.getBoundingClientRect();
+    const boxLeft = cb ? Math.max(u.left, cb.left) : u.left;
+    const boxRight = Math.min(u.right, cb ? cb.right : vw, vw);
     box.style.top = u.top + sy - 2 + "px";
-    box.style.left = u.left + sx - 2 + "px";
-    box.style.width = u.right - u.left + 4 + "px";
+    box.style.left = boxLeft + sx - 2 + "px";
+    box.style.width = Math.max(0, boxRight - boxLeft) + 4 + "px";
     box.style.height = u.bottom - u.top + 4 + "px";
-    // Card sits just below the box, aligned to its left.
-    host.style.top = u.bottom + sy + 8 + "px";
-    host.style.left = u.left + sx + "px";
+
+    // Card hovers on the right side of the diff (fixed to the viewport) so the
+    // reviewer can scroll and read the code while answering. It tracks the
+    // hunk vertically but is always clamped fully inside the viewport.
+    const margin = 12;
+    const cardH = card.getBoundingClientRect().height;
+    const maxTop = Math.max(margin, vh - cardH - margin);
+    const top = Math.min(Math.max(u.top, margin), maxTop);
+    host.style.position = "fixed";
+    host.style.left = "auto";
+    host.style.right = margin + "px";
+    host.style.top = top + "px";
   }
 
   let rafId = 0;
