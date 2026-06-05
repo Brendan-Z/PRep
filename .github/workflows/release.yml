@@ -26,7 +26,7 @@ jobs:
           bun-version: latest
       - uses: actions/setup-node@v4
         with:
-          node-version: 20 # runtime for semantic-release; build still uses bun
+          node-version: 24 # runtime for semantic-release (requires >=24.10); build still uses bun
       - run: bun install --frozen-lockfile
       - run: npx semantic-release
         env:
