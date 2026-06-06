@@ -22,7 +22,13 @@ jobs:
     if: >-
       github.repository == 'CBA-General/PRep' &&
       contains(github.event.issue.labels.*.name, 'feedback')
-    runs-on: [self-hosted, cba]
+    # SECURITY: issue title/body are attacker-controlled (any org member can open a
+    # feedback issue). Run this on an EPHEMERAL, sandboxed self-hosted runner whose
+    # only network egress is the Portkey gateway + api.github.com — the runner is
+    # reused for nothing else. The narrow tool allow/deny-list below + the
+    # "untrusted input" rule in the agent prompt are defence-in-depth, not a
+    # substitute for that isolation.
+    runs-on: [self-hosted, cba, ephemeral]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -53,6 +59,10 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           prompt_file: .github/agents/triage-and-fix.md
-          # Allow the tools the agent needs to branch, build, and open a PR.
+          # Least privilege: only the specific commands the agent needs to branch,
+          # build, and open a PR — NOT unrestricted Bash. The deny-list blocks the
+          # obvious exfiltration / arbitrary-fetch vectors a prompt injection in the
+          # issue body would reach for.
           claude_args: >-
-            --allowedTools "Bash,Edit,Write,Read,Glob,Grep"
+            --allowedTools "Bash(git:*) Bash(gh:*) Bash(bun install) Bash(bun run typecheck) Bash(bun run build) Bash(bun run lint) Edit Write Read Glob Grep"
+            --disallowedTools "Bash(curl:*) Bash(wget:*) Bash(nc:*) Bash(ssh:*) Bash(scp:*) Bash(eval:*) Bash(env) Bash(printenv) Bash(cat /proc/*)"
