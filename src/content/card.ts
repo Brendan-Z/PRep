@@ -25,6 +25,7 @@ export interface CardHandlers {
   onNext?: () => void;
   onFinish?: () => void;
   onExplainFile?: () => void;
+  onFeedback?: () => void;
 }
 
 // Where the current question sits in its 1-3 question set — drives the progress
@@ -78,6 +79,8 @@ const CSS = `
   .hd .spacer { flex: 1; }
   .hd .x { cursor: pointer; border: 1px solid #212327; background: transparent; color: #dadbdf; font-size: 15px; line-height: 1; width: 24px; height: 24px; border-radius: 9999px; }
   .hd .x:hover { background: #1a1c20; color: #ffffff; }
+  .hd .fb { cursor: pointer; border: 1px solid #212327; background: transparent; color: #7d8187; font-size: 13px; line-height: 1; width: 24px; height: 24px; border-radius: 9999px; }
+  .hd .fb:hover { background: #1a1c20; color: #ffffff; }
   .body { padding: 16px; flex: 1 1 auto; min-height: 0; overflow-y: auto; }
   .q { font-size: 16px; line-height: 24px; margin: 0 0 14px; color: #ffffff; }
   .opts { display: flex; flex-direction: column; gap: 8px; }
@@ -289,8 +292,15 @@ export function openCard(
   }
 
   function header(title: string): string {
-    // Dot is colour-coded by mode: green for learn, orange for quiz.
-    return `<div class="hd"><span class="dot" style="background:${accent}"></span><span class="title">${escapeHtml(title)}</span><span class="spacer"></span><button class="x" data-act="close" title="Close">×</button></div>`;
+    // Dot is colour-coded by mode: green for learn, orange for quiz. The ⚐ files
+    // feedback (opens a prefilled GitHub issue); × closes the card.
+    return `<div class="hd"><span class="dot" style="background:${accent}"></span><span class="title">${escapeHtml(title)}</span><span class="spacer"></span><button class="fb" data-act="feedback" title="Send feedback">⚐</button><button class="x" data-act="close" title="Close">×</button></div>`;
+  }
+
+  // Wired by every view that renders header(): close + feedback live in the header.
+  function wireHeader(): void {
+    wireClose();
+    wireFeedback();
   }
 
   function wireClose(): void {
@@ -300,6 +310,12 @@ export function openCard(
         destroy();
         handlers.onClose?.();
       });
+  }
+
+  function wireFeedback(): void {
+    card
+      .querySelector('[data-act="feedback"]')
+      ?.addEventListener("click", () => handlers.onFeedback?.());
   }
 
   function wireExplainFile(): void {
@@ -347,7 +363,7 @@ export function openCard(
       card.innerHTML =
         header(isLearn ? "PRep · Learning" : "PRep · Quiz") +
         `<div class="body"><div class="row muted"><span class="spinner"></span><span>Generating ${isLearn ? "an explanation" : "a question"}…</span></div></div>`;
-      wireClose();
+      wireHeader();
       reposition();
     },
 
@@ -365,7 +381,7 @@ export function openCard(
       card.innerHTML =
         header(title) +
         `<div class="body"><p class="q">${renderInline(quiz.question)}</p><div class="opts">${opts}</div>${stepperFooter(position)}${modeHint}</div>`;
-      wireClose();
+      wireHeader();
       wireStepper();
       card.querySelectorAll<HTMLButtonElement>(".opt").forEach((btn) => {
         btn.addEventListener("click", () => {
@@ -421,7 +437,7 @@ export function openCard(
         `<div class="body">` +
         `<p class="q">${renderInline(explanation.summary)}</p>` +
         `<div class="exlines">${lines}</div>${fileFooter}${modeHint}</div>`;
-      wireClose();
+      wireHeader();
       wireExplainFile();
       reposition();
     },
@@ -440,7 +456,7 @@ export function openCard(
         `<div class="body">` +
         `<p class="q">${renderInline(overview.summary)}</p>` +
         `<div class="exlines">${sections}</div>${modeHint}</div>`;
-      wireClose();
+      wireHeader();
       reposition();
     },
 
@@ -448,7 +464,7 @@ export function openCard(
       card.innerHTML =
         header("PRep") +
         `<div class="body"><p class="status bad">Couldn't generate a question.</p><p class="muted">${escapeHtml(message || "Unknown error")}</p>${canRetry ? `<div class="row" style="margin-top:10px"><button class="btn primary" data-act="retry">Retry</button></div>` : ""}</div>`;
-      wireClose();
+      wireHeader();
       const retry = card.querySelector('[data-act="retry"]');
       if (retry) retry.addEventListener("click", () => handlers.onRetry?.());
       reposition();
@@ -458,7 +474,7 @@ export function openCard(
       card.innerHTML =
         header("Setup needed") +
         `<div class="body"><p>Set your Portkey API key to start quizzing.</p><p class="muted" style="margin-top:8px">Click the <b>PRep</b> icon in your browser toolbar to open settings.</p></div>`;
-      wireClose();
+      wireHeader();
       reposition();
     },
   };

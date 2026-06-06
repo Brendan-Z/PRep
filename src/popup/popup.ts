@@ -3,6 +3,7 @@
 
 import { loadPopupSettings, savePopupSettings } from "../shared/settings";
 import { sendMessage, type TestKeyResponse } from "../shared/messages";
+import { buildFeedbackUrl } from "../shared/feedback";
 
 const input = (id: string): HTMLInputElement => document.getElementById(id) as HTMLInputElement;
 const statusEl = document.getElementById("status")!;
@@ -68,6 +69,14 @@ document.getElementById("test")!.addEventListener("click", async () => {
   } catch (e) {
     setStatus("✗ " + String(e instanceof Error ? e.message : e), "bad");
   }
+});
+
+// Context-free feedback (no diff open): opens a prefilled GitHub issue in a new tab.
+document.getElementById("feedback")!.addEventListener("click", (e) => {
+  e.preventDefault();
+  void chrome.tabs.create({
+    url: buildFeedbackUrl({ version: chrome.runtime.getManifest().version }),
+  });
 });
 
 load();

@@ -1,0 +1,31 @@
+name: PRep feedback
+description: Report a bug or request a feature for the PRep extension.
+title: "[feedback] "
+labels: ["feedback"]
+body:
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Type
+      description: Is this a bug or a feature request?
+      options:
+        - Bug
+        - Feature request
+    validations:
+      required: true
+  - type: textarea
+    id: summary
+    attributes:
+      label: What's this about?
+      description: What did you expect, and what happened (or what would you like)?
+      placeholder: When I click a hunk in Learn mode, the card shows…
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Auto-filled when opened from the extension. Leave as-is if present.
+      render: markdown
+    validations:
+      required: false
