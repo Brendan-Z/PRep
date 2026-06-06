@@ -86,6 +86,12 @@ const CSS = `
     font-size: 12px; letter-spacing: 1.2px; text-transform: uppercase; color: #7d8187;
   }
   .explain p { margin: 0; white-space: pre-wrap; color: #dadbdf; }
+  code {
+    font-family: ui-monospace, "Geist Mono", SFMono-Regular, Menlo, Monaco, monospace;
+    font-size: .9em; padding: 1px 5px; border-radius: 4px;
+    background: #1a1c20; border: 1px solid #2a2d33; color: #ffb27a;
+  }
+  em { font-style: italic; color: #ffffff; }
   .muted { color: #7d8187; }
   .btn { cursor: pointer; padding: 8px 16px; border: 1px solid #212327; border-radius: 9999px; background: transparent; color: #ffffff; font: inherit; }
   .btn:hover { background: #1a1c20; }
@@ -102,6 +108,21 @@ function escapeHtml(s: string): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+// Render light markdown inline: `code` -> <code>, *emph* -> <em>. The source
+// text is escaped FIRST, so the only HTML we emit is our own fixed tags around
+// already-escaped content — no injection risk from quiz/explanation text.
+function renderInline(s: string): string {
+  return escapeHtml(s)
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*([^*\n]+)\*/g, "<em>$1</em>");
+}
+
+// Explanations cram every option's verdict into one paragraph. Start each
+// "Option N …" clause on its own line so the reasoning is scannable.
+function renderExplanation(s: string): string {
+  return renderInline(s).replace(/\s+(Option\s+\d+\b)/g, "<br><br>$1");
 }
 
 function unionRect(rows: Element[]): { top: number; left: number; right: number; bottom: number } {
@@ -248,12 +269,12 @@ export function openCard(rows: Element[], handlers: CardHandlers = {}): CardCont
       const opts = quiz.options
         .map(
           (o, i) =>
-            `<button class="opt" data-index="${i}"><span class="key">${"ABCD"[i]}</span><span>${escapeHtml(o)}</span></button>`,
+            `<button class="opt" data-index="${i}"><span class="key">${"ABCD"[i]}</span><span>${renderInline(o)}</span></button>`,
         )
         .join("");
       card.innerHTML =
         header("What does this code do?") +
-        `<div class="body"><p class="q">${escapeHtml(quiz.question)}</p><div class="opts">${opts}</div></div>`;
+        `<div class="body"><p class="q">${renderInline(quiz.question)}</p><div class="opts">${opts}</div></div>`;
       wireClose();
       card.querySelectorAll<HTMLButtonElement>(".opt").forEach((btn) => {
         btn.addEventListener("click", () => {
@@ -282,7 +303,7 @@ export function openCard(rows: Element[], handlers: CardHandlers = {}): CardCont
       if (result.explanation) {
         const ex = document.createElement("div");
         ex.className = "explain";
-        ex.innerHTML = `<h5>Explanation</h5><p>${escapeHtml(result.explanation)}</p>`;
+        ex.innerHTML = `<h5>Explanation</h5><p>${renderExplanation(result.explanation)}</p>`;
         body.appendChild(ex);
       }
       reposition();
