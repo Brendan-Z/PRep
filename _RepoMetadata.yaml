@@ -1,0 +1,12 @@
+# Golden Pathway repository ownership metadata (CBA).
+# Schema + values matched to CBA-General/ai-engineering — PRep is an AI Powered
+# Engineering tool, so it shares the AIPE crew's TeamId / CI registration.
+ApplicationMappings:
+  TeamId: WGRT34SK
+  ApplicationServiceCINum: CI041443643
+  BusinessAppName: PRep::Production (CI041443643)
+  BusinessUnit: Chief Technology Office
+  Domain: CIO, Technology
+  Crew: AI Powered Engineering
+  Squad: AI Powered Engineering
+  OwnershipTracked: true
