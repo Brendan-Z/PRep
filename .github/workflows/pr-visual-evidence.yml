@@ -20,7 +20,7 @@ jobs:
     if: >-
       github.repository == 'CBA-General/PRep' &&
       contains(github.event.pull_request.labels.*.name, 'agent-generated')
-    runs-on: [self-hosted, cba]
+    runs-on: default # CBA enterprise self-hosted runner
     env:
       PR_NUMBER: ${{ github.event.pull_request.number }}
       PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
