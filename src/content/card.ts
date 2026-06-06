@@ -131,7 +131,7 @@ export function openCard(rows: Element[], handlers: CardHandlers = {}): CardCont
   const box = document.createElement("div");
   box.id = BOX_ID;
   Object.assign(box.style, {
-    position: "absolute",
+    position: "fixed",
     border: "2px solid #ff7a17",
     borderRadius: "8px",
     boxShadow: "0 0 0 4px rgba(255,122,23,.15)",
@@ -154,23 +154,30 @@ export function openCard(rows: Element[], handlers: CardHandlers = {}): CardCont
   function reposition(): void {
     if (!rows.length) return;
     const u = unionRect(rows); // viewport coordinates
-    const sx = window.scrollX,
-      sy = window.scrollY;
     const vw = document.documentElement.clientWidth;
     const vh = document.documentElement.clientHeight;
 
-    // Highlight box stays glued to the hunk, but its width is clamped to the
-    // file container (falling back to the viewport). A large diff whose code
-    // cell scrolls horizontally reports row rects far wider than the page, so
-    // without this clamp the box paints off the right edge of the page.
+    // Highlight box is clamped to the visible viewport slice of the hunk and
+    // pinned with position:fixed. A large hunk (e.g. a whole newly-added file)
+    // is taller/wider than the screen, so drawing its full union rect paints
+    // orange side-rails that run the length of the page and linger as you
+    // scroll past it. Clamping to [0, viewport] keeps the rails the height of
+    // the visible slice; once the hunk scrolls fully out of view the box hides.
     const container = rows[0].closest(CONTAINER_SEL);
     const cb = container?.getBoundingClientRect();
-    const boxLeft = cb ? Math.max(u.left, cb.left) : u.left;
-    const boxRight = Math.min(u.right, cb ? cb.right : vw, vw);
-    box.style.top = u.top + sy - 2 + "px";
-    box.style.left = boxLeft + sx - 2 + "px";
-    box.style.width = Math.max(0, boxRight - boxLeft) + 4 + "px";
-    box.style.height = u.bottom - u.top + 4 + "px";
+    const vLeft = Math.max(u.left, cb ? cb.left : 0);
+    const vRight = Math.min(u.right, cb ? cb.right : vw, vw);
+    const vTop = Math.max(u.top, 0);
+    const vBottom = Math.min(u.bottom, vh);
+    if (vBottom <= vTop || vRight <= vLeft) {
+      box.style.display = "none";
+    } else {
+      box.style.display = "block";
+      box.style.top = vTop - 2 + "px";
+      box.style.left = vLeft - 2 + "px";
+      box.style.width = vRight - vLeft + 4 + "px";
+      box.style.height = vBottom - vTop + 4 + "px";
+    }
 
     // Card hovers on the right side of the diff (fixed to the viewport) so the
     // reviewer can scroll and read the code while answering. It tracks the
