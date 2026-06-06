@@ -1,0 +1,58 @@
+name: Feedback triage
+
+# Fires when a feedback issue is opened. The Claude Code agent triages relevance
+# and, if relevant, implements the change and opens a draft PR. Screenshots are
+# added by pr-visual-evidence.yml.
+#
+# Gated to the CBA enterprise org: portkey.aipe.cba is only reachable from a
+# self-hosted enterprise runner, so this is a no-op (and stays green) elsewhere.
+
+on:
+  issues:
+    types: [opened, labeled]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  triage:
+    # Only run in the enterprise org, and only for feedback issues.
+    if: >-
+      github.repository == 'CBA-General/PRep' &&
+      contains(github.event.issue.labels.*.name, 'feedback')
+    runs-on: [self-hosted, cba]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - run: bun install --frozen-lockfile
+
+      - name: Triage and fix
+        uses: anthropics/claude-code-action@v1
+        env:
+          # Route Claude Code through the CBA Portkey gateway (Bedrock-backed).
+          # NOTE: validate the exact Anthropic-compatible base path + header set
+          # against the gateway (see src/background/portkey.ts) before relying on CI.
+          ANTHROPIC_BASE_URL: ${{ vars.PORTKEY_BASE_URL }}
+          ANTHROPIC_CUSTOM_HEADERS: |
+            x-portkey-api-key: ${{ secrets.PORTKEY_API_KEY }}
+          ANTHROPIC_MODEL: ${{ vars.PORTKEY_MODEL }}
+          # claude-code-action requires this to be set; the real auth is the
+          # Portkey header above.
+          ANTHROPIC_API_KEY: ${{ secrets.PORTKEY_API_KEY }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          prompt_file: .github/agents/triage-and-fix.md
+          # Allow the tools the agent needs to branch, build, and open a PR.
+          claude_args: >-
+            --allowedTools "Bash,Edit,Write,Read,Glob,Grep"
