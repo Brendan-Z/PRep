@@ -110,6 +110,9 @@ function handlers(): CardHandlers {
         "_blank",
         "noopener",
       );
+      // Confirm the click worked — the issue form opens in a new background tab,
+      // which is easy to miss otherwise.
+      showToast("PRep · Opening feedback…");
     },
   };
 }
@@ -351,9 +354,15 @@ let toastEl: HTMLDivElement | null = null;
 let toastTimer = 0;
 
 function showModeToast(m: Mode): void {
+  showToast(m === "learn" ? "PRep · Learning mode" : "PRep · Quiz mode");
+}
+
+// Small bottom-centre toast (auto-dismisses). Shared by the mode switch and the
+// feedback confirmation.
+function showToast(text: string): void {
   toastEl?.remove();
   const el = document.createElement("div");
-  el.textContent = m === "learn" ? "PRep · Learning mode" : "PRep · Quiz mode";
+  el.textContent = text;
   Object.assign(el.style, {
     position: "fixed",
     left: "50%",
