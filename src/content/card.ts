@@ -51,9 +51,12 @@ const CSS = `
     border: 1px solid #212327; border-radius: 8px;
     box-shadow: 0 8px 24px rgba(0,0,0,.5);
     width: 460px; max-width: calc(100vw - 24px);
-    overflow: hidden;
+    /* Cap to the viewport and let the body scroll — long explanations (esp.
+       learn mode) would otherwise run off the bottom of the screen. */
+    max-height: calc(100vh - 24px);
+    display: flex; flex-direction: column; overflow: hidden;
   }
-  .hd { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid #212327; }
+  .hd { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid #212327; flex: none; }
   .hd .dot { width: 8px; height: 8px; border-radius: 9999px; background: #ff7a17; flex: none; }
   .hd .title {
     font-family: ui-monospace, "Geist Mono", SFMono-Regular, Menlo, Monaco, monospace;
@@ -62,7 +65,7 @@ const CSS = `
   .hd .spacer { flex: 1; }
   .hd .x { cursor: pointer; border: 1px solid #212327; background: transparent; color: #dadbdf; font-size: 15px; line-height: 1; width: 24px; height: 24px; border-radius: 9999px; }
   .hd .x:hover { background: #1a1c20; color: #ffffff; }
-  .body { padding: 16px; }
+  .body { padding: 16px; flex: 1 1 auto; min-height: 0; overflow-y: auto; }
   .q { font-size: 16px; line-height: 24px; margin: 0 0 14px; color: #ffffff; }
   .opts { display: flex; flex-direction: column; gap: 8px; }
   .opt {
@@ -189,17 +192,29 @@ export function openCard(rows: Element[], handlers: CardHandlers = {}): CardCont
     const u = unionRect(rows); // viewport coordinates
     const vw = document.documentElement.clientWidth;
     const vh = document.documentElement.clientHeight;
+    const margin = 12;
 
-    // Highlight box is clamped to the visible viewport slice of the hunk and
-    // pinned with position:fixed. A large hunk (e.g. a whole newly-added file)
-    // is taller/wider than the screen, so drawing its full union rect paints
-    // orange side-rails that run the length of the page and linger as you
-    // scroll past it. Clamping to [0, viewport] keeps the rails the height of
-    // the visible slice; once the hunk scrolls fully out of view the box hides.
+    // Card first: it hovers fixed on the right so the code stays readable while
+    // answering. Track the hunk vertically but clamp fully inside the viewport.
+    const cardH = card.getBoundingClientRect().height;
+    const maxTop = Math.max(margin, vh - cardH - margin);
+    host.style.position = "fixed";
+    host.style.left = "auto";
+    host.style.right = margin + "px";
+    host.style.top = Math.min(Math.max(u.top, margin), maxTop) + "px";
+    const hostRect = host.getBoundingClientRect();
+
+    // Highlight box: clamped to the visible viewport slice of the hunk and
+    // pinned with position:fixed. A whole-file hunk is taller/wider than the
+    // screen, so drawing the full union rect paints orange rails that overflow
+    // the page. Clamp vertically to [0, viewport] (hide when scrolled past) and
+    // clamp the right edge to stop just before the floating card, so it never
+    // trails off into the empty strip beside it.
     const container = rows[0].closest(CONTAINER_SEL);
     const cb = container?.getBoundingClientRect();
+    const rightCap = Math.min(vw, cb ? cb.right : vw, hostRect.left - 8);
     const vLeft = Math.max(u.left, cb ? cb.left : 0);
-    const vRight = Math.min(u.right, cb ? cb.right : vw, vw);
+    const vRight = Math.min(u.right, rightCap);
     const vTop = Math.max(u.top, 0);
     const vBottom = Math.min(u.bottom, vh);
     if (vBottom <= vTop || vRight <= vLeft) {
@@ -211,18 +226,6 @@ export function openCard(rows: Element[], handlers: CardHandlers = {}): CardCont
       box.style.width = vRight - vLeft + 4 + "px";
       box.style.height = vBottom - vTop + 4 + "px";
     }
-
-    // Card hovers on the right side of the diff (fixed to the viewport) so the
-    // reviewer can scroll and read the code while answering. It tracks the
-    // hunk vertically but is always clamped fully inside the viewport.
-    const margin = 12;
-    const cardH = card.getBoundingClientRect().height;
-    const maxTop = Math.max(margin, vh - cardH - margin);
-    const top = Math.min(Math.max(u.top, margin), maxTop);
-    host.style.position = "fixed";
-    host.style.left = "auto";
-    host.style.right = margin + "px";
-    host.style.top = top + "px";
   }
 
   let rafId = 0;
