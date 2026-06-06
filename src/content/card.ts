@@ -20,6 +20,7 @@ export interface CardHandlers {
   onClose?: () => void;
   onRetry?: () => void;
   onAnswer?: (index: number) => void;
+  onNewQuestion?: () => void;
 }
 
 export interface QuizResult {
@@ -35,7 +36,7 @@ export interface CardController {
   showLoading(): void;
   showQuestion(quiz: Quiz): void;
   showResult(result: QuizResult): void;
-  showExplanation(explanation: Explanation): void;
+  showExplanation(explanation: Explanation, code: string): void;
   showError(message: string, canRetry: boolean): void;
   showNeedsKey(): void;
 }
@@ -96,23 +97,36 @@ const CSS = `
     background: #1a1c20; border: 1px solid #2a2d33; color: #ffb27a;
   }
   em { font-style: italic; color: #ffffff; }
-  .exlines { display: flex; flex-direction: column; gap: 12px; margin-top: 6px; }
-  .exline { border-left: 2px solid #ff7a17; padding-left: 12px; }
-  .exline pre {
-    margin: 0 0 6px; padding: 8px 10px; overflow-x: auto;
+  .exfull {
+    margin: 0 0 14px; padding: 10px 12px; overflow-x: auto;
     background: #141414; border: 1px solid #212327; border-radius: 6px;
   }
-  .exline pre code {
+  .exfull code {
     background: none; border: none; padding: 0; color: #dadbdf;
-    font-size: 12.5px; line-height: 1.5; white-space: pre;
+    font-size: 12.5px; line-height: 1.55; white-space: pre;
   }
-  .exline .exp { margin: 0; color: #dadbdf; font-size: 14px; line-height: 1.5; }
+  .exlines { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
+  .exline { border-left: 2px solid #ff7a17; padding-left: 12px; }
+  .exline .ln {
+    display: block; margin-bottom: 3px; padding: 0;
+    background: none; border: none; color: #ffb27a;
+    font-family: ui-monospace, "Geist Mono", SFMono-Regular, Menlo, Monaco, monospace;
+    font-size: 12px; line-height: 1.45; white-space: pre-wrap; word-break: break-word;
+  }
+  .exline .exp { margin: 0; color: #dadbdf; font-size: 13.5px; line-height: 1.5; }
   .muted { color: #7d8187; }
   .btn { cursor: pointer; padding: 8px 16px; border: 1px solid #212327; border-radius: 9999px; background: transparent; color: #ffffff; font: inherit; }
   .btn:hover { background: #1a1c20; }
   .btn.primary { background: #ffffff; border-color: #ffffff; color: #0a0a0a; }
   .btn.primary:hover { background: #fafaf7; }
   .row { display: flex; gap: 8px; align-items: center; }
+  .footer { margin-top: 16px; padding-top: 14px; border-top: 1px solid #212327; }
+  .hint { margin: 12px 0 0; font-size: 12px; line-height: 1.6; color: #7d8187; }
+  .hint kbd {
+    font-family: ui-monospace, "Geist Mono", SFMono-Regular, Menlo, Monaco, monospace;
+    font-size: 11px; padding: 1px 5px; border-radius: 4px;
+    border: 1px solid #363a3f; background: #141414; color: #dadbdf;
+  }
   .spinner { width: 14px; height: 14px; border: 2px solid #212327; border-top-color: #ffffff; border-radius: 50%; animation: pq-spin .7s linear infinite; flex: none; }
   @keyframes pq-spin { to { transform: rotate(360deg); } }
 `;
@@ -167,7 +181,7 @@ export function openCard(rows: Element[], handlers: CardHandlers = {}): CardCont
   const box = document.createElement("div");
   box.id = BOX_ID;
   Object.assign(box.style, {
-    position: "fixed",
+    position: "absolute",
     border: "2px solid #ff7a17",
     borderRadius: "8px",
     boxShadow: "0 0 0 4px rgba(255,122,23,.15)",
@@ -202,30 +216,21 @@ export function openCard(rows: Element[], handlers: CardHandlers = {}): CardCont
     host.style.left = "auto";
     host.style.right = margin + "px";
     host.style.top = Math.min(Math.max(u.top, margin), maxTop) + "px";
-    const hostRect = host.getBoundingClientRect();
-
-    // Highlight box: clamped to the visible viewport slice of the hunk and
-    // pinned with position:fixed. A whole-file hunk is taller/wider than the
-    // screen, so drawing the full union rect paints orange rails that overflow
-    // the page. Clamp vertically to [0, viewport] (hide when scrolled past) and
-    // clamp the right edge to stop just before the floating card, so it never
-    // trails off into the empty strip beside it.
+    // Highlight box: the FULL hunk, positioned in document coordinates so it
+    // scrolls naturally with the code (top stays glued to the real first row —
+    // no pinning under the sticky page header). Only the width is clamped to the
+    // file container/viewport so a wide diff can't paint the box off the right
+    // edge of the page.
+    const sx = window.scrollX;
+    const sy = window.scrollY;
     const container = rows[0].closest(CONTAINER_SEL);
     const cb = container?.getBoundingClientRect();
-    const rightCap = Math.min(vw, cb ? cb.right : vw, hostRect.left - 8);
-    const vLeft = Math.max(u.left, cb ? cb.left : 0);
-    const vRight = Math.min(u.right, rightCap);
-    const vTop = Math.max(u.top, 0);
-    const vBottom = Math.min(u.bottom, vh);
-    if (vBottom <= vTop || vRight <= vLeft) {
-      box.style.display = "none";
-    } else {
-      box.style.display = "block";
-      box.style.top = vTop - 2 + "px";
-      box.style.left = vLeft - 2 + "px";
-      box.style.width = vRight - vLeft + 4 + "px";
-      box.style.height = vBottom - vTop + 4 + "px";
-    }
+    const left = Math.max(u.left, cb ? cb.left : 0);
+    const right = Math.min(u.right, cb ? cb.right : vw, vw);
+    box.style.top = u.top + sy - 2 + "px";
+    box.style.left = left + sx - 2 + "px";
+    box.style.width = Math.max(0, right - left) + 4 + "px";
+    box.style.height = u.bottom - u.top + 4 + "px";
   }
 
   let rafId = 0;
@@ -268,6 +273,16 @@ export function openCard(rows: Element[], handlers: CardHandlers = {}): CardCont
       });
   }
 
+  function wireNewQuestion(): void {
+    const b = card.querySelector('[data-act="new"]');
+    if (b) b.addEventListener("click", () => handlers.onNewQuestion?.());
+  }
+
+  // Footer with a "New question" button — regenerates a fresh quiz for the file.
+  const newQuestionFooter = `<div class="row footer"><button class="btn" data-act="new">New question</button></div>`;
+  // Shortcut reminder shown at the bottom of every card view.
+  const modeHint = `<p class="hint">Press <kbd>⌘⇧L</kbd> (or <kbd>Ctrl⇧L</kbd>) to swap between Quiz and Learn mode.</p>`;
+
   const api: CardController = {
     reposition,
     destroy,
@@ -289,8 +304,9 @@ export function openCard(rows: Element[], handlers: CardHandlers = {}): CardCont
         .join("");
       card.innerHTML =
         header("What does this code do?") +
-        `<div class="body"><p class="q">${renderInline(quiz.question)}</p><div class="opts">${opts}</div></div>`;
+        `<div class="body"><p class="q">${renderInline(quiz.question)}</p><div class="opts">${opts}</div>${newQuestionFooter}${modeHint}</div>`;
       wireClose();
+      wireNewQuestion();
       card.querySelectorAll<HTMLButtonElement>(".opt").forEach((btn) => {
         btn.addEventListener("click", () => {
           const idx = Number(btn.dataset.index);
@@ -321,19 +337,28 @@ export function openCard(rows: Element[], handlers: CardHandlers = {}): CardCont
         ex.innerHTML = `<h5>Explanation</h5><p>${renderExplanation(result.explanation)}</p>`;
         body.appendChild(ex);
       }
+      // Keep the "New question" footer + hint at the very bottom, below the explanation.
+      const footer = body.querySelector(".footer");
+      if (footer) body.appendChild(footer);
+      const hint = body.querySelector(".hint");
+      if (hint) body.appendChild(hint);
       reposition();
     },
 
-    showExplanation(explanation: Explanation) {
+    showExplanation(explanation: Explanation, code: string) {
+      // One full code block up top, then short per-line notes below — not a
+      // separate code block per line (that was noisy for multi-line selections).
       const lines = explanation.lines
         .map(
           (l) =>
-            `<div class="exline"><pre><code>${escapeHtml(l.code)}</code></pre><p class="exp">${renderInline(l.explanation)}</p></div>`,
+            `<div class="exline"><code class="ln">${escapeHtml(l.code)}</code><p class="exp">${renderInline(l.explanation)}</p></div>`,
         )
         .join("");
       card.innerHTML =
         header("What does this do?") +
-        `<div class="body"><p class="q">${renderInline(explanation.summary)}</p><div class="exlines">${lines}</div></div>`;
+        `<div class="body"><pre class="exfull"><code>${escapeHtml(code)}</code></pre>` +
+        `<p class="q">${renderInline(explanation.summary)}</p>` +
+        `<div class="exlines">${lines}</div>${modeHint}</div>`;
       wireClose();
       reposition();
     },

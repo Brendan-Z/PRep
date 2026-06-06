@@ -148,16 +148,26 @@ export function getRowRange(a: Element, b: Element): Element[] {
   return all.slice(lo, hi + 1);
 }
 
-// Concatenated code text of an arbitrary set of rows (learn-mode line/block).
-export function getRowsText(rows: Element[]): string {
+// Concatenated code text of an arbitrary set of rows (learn-mode line/block,
+// or a whole file for quiz mode). `limit` caps the characters sent to the model.
+export function getRowsText(rows: Element[], limit = 4000): string {
   if (!rows.length) return "";
   const view = rowView(rows[0]);
   let text = rows
     .map((r) => codeTextOfRow(r, view))
     .join("\n")
     .replace(new RegExp(String.fromCharCode(160), "g"), " ");
-  if (text.length > 4000) text = text.slice(0, 4000) + "\n… (truncated)";
+  if (text.length > limit) text = text.slice(0, limit) + "\n… (truncated)";
   return text.trim();
+}
+
+// Every code row in the file containing `row`, across all hunks (changed +
+// context). Used for whole-file quiz generation and its highlight box.
+export function getFileRows(row: Element): Element[] {
+  const view = rowView(row);
+  const container = fileContainer(row, view);
+  if (!container) return [];
+  return allCodeRows(container, view);
 }
 
 // Concatenated code text of the hunk containing `row`.
