@@ -1,0 +1,28 @@
+# Patchwerk (Project Coral) config — onboards PRep to the comment-triggered
+# feedback→PR loop. Once the repo is in CBA-General and onboarded to
+# patchwerk-cloud, a `@patchwerk` comment on a feedback issue runs pw-triage →
+# pw-fix-github-issue → (our) verify-extension-feature skill.
+# Docs: https://ai-powered-engineering.pages.commbank.io/project-coral/installation/configuration-setup
+
+project:
+  business_unit: Chief Technology Office
+  crew: AI Powered Engineering
+
+ai:
+  default_tool: "claude"
+  # Feed the repo guide to the agent as custom instructions.
+  custom_instructions_file: "CLAUDE.md"
+  # Feedback issues should land as a fresh PR for human review (not direct commits).
+  direct_commit: false
+  # Auto-review agent-opened PRs.
+  review_pr_on_open: true
+  branch_prefixes:
+    - feat
+    - fix
+    - docs
+
+# Not using SonarQube/Snyk/coverage sync yet — leave empty so those flows are inert.
+sync:
+  issues_to_sync: []
+
+log_level: "INFO"

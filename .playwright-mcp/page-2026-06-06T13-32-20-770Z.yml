@@ -1,0 +1,42 @@
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - link "Skip to content" [ref=e4] [cursor=pointer]:
+      - /url: "#start-of-content"
+    - banner [ref=e6]
+  - main [ref=e9]:
+    - generic [ref=e10]:
+      - generic [ref=e14]:
+        - img [ref=e17]
+        - heading "Sign in to GitHub" [level=1] [ref=e20]
+      - generic [ref=e22]:
+        - generic [ref=e23]:
+          - generic [ref=e24]: Username or email address
+          - textbox "Username or email address" [active] [ref=e25]
+        - generic [ref=e26]:
+          - generic [ref=e27]: Password
+          - textbox "Password" [ref=e28]
+          - link "Forgot password?" [ref=e29] [cursor=pointer]:
+            - /url: /password_reset
+        - button "Sign in" [ref=e31] [cursor=pointer]
+      - paragraph [ref=e34]:
+        - text: New to GitHub?
+        - link "Create an account" [ref=e35] [cursor=pointer]:
+          - /url: /signup?return_to=https%3A%2F%2Fgithub.com%2FBrendan-Z%2FPRep%2Fissues%2Fnew%3Flabels%3Dfeedback%26title%3D%255Bfeedback%255D%2Bsrc%252Fcontent%252Fcard.ts%26body%3D%253C%2521--%2BDescribe%2Byour%2Bfeedback%2Babove%2Bthis%2Bline%252C%2Bthen%2Bclick%2BSubmit.%2B--%253E%250A%250A%2523%2523%2523%2BWhat%2527s%2Bthis%2Babout%253F%250A%250A_Bug%2Breport%2Bor%2Bfeature%2Brequest%253F%2BWhat%2Bdid%2Byou%2Bexpect%252C%2Band%2Bwhat%2Bhappened%253F_%250A%250A%250A---%250A%253Csub%253EAuto-collected%2Bby%2BPRep%2B%25E2%2580%2594%2Bplease%2Bkeep%2Bfor%2Btriage.%253C%252Fsub%253E%250A%250A%257C%2BField%2B%257C%2BValue%2B%257C%250A%257C%2B---%2B%257C%2B---%2B%257C%250A%257C%2BVersion%2B%257C%2B1.5.0%2B%257C%250A%257C%2BMode%2B%257C%2Bquiz%2B%257C%250A%257C%2BPage%2B%257C%2Bhttps%253A%252F%252Fgithub.com%252FBrendan-Z%252FPRep%252Fpull%252F11%252Ffiles%2B%257C%250A%257C%2BFile%2B%257C%2Bsrc%252Fcontent%252Fcard.ts%2B%257C%250A%250A%253Cdetails%253E%253Csummary%253ECode%2Bin%2Bcontext%253C%252Fsummary%253E%250A%250A%2560%2560%2560ts%250Afunction%2Bheader%2528title%2529%257B%2Breturn%2B%2560%253Cdiv%253E%2524%257Btitle%257D%253C%252Fdiv%253E%2560%253B%2B%257D%250A%2560%2560%2560%250A%250A%253C%252Fdetails%253E&source=login
+  - contentinfo [ref=e36]:
+    - list [ref=e37]:
+      - listitem [ref=e38]:
+        - link "Terms" [ref=e39] [cursor=pointer]:
+          - /url: https://docs.github.com/site-policy/github-terms/github-terms-of-service
+      - listitem [ref=e40]:
+        - link "Privacy" [ref=e41] [cursor=pointer]:
+          - /url: https://docs.github.com/site-policy/privacy-policies/github-privacy-statement
+      - listitem [ref=e42]:
+        - link "Docs" [ref=e43] [cursor=pointer]:
+          - /url: https://docs.github.com
+      - listitem [ref=e44]:
+        - link "Contact GitHub Support" [ref=e45] [cursor=pointer]:
+          - /url: https://support.github.com
+      - listitem [ref=e46]:
+        - button "Manage cookies" [ref=e48] [cursor=pointer]
+      - listitem [ref=e49]:
+        - button "Do not share my personal information" [ref=e51] [cursor=pointer]
