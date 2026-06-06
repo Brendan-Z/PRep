@@ -13,23 +13,38 @@ permissions:
   issues: write
   pull-requests: write
 
+env:
+  CBA_REGISTRY: https://artifactory.internal.cba/artifactory/api/npm/npm/
+
 jobs:
   release:
     # See ci.yml: `default` on the CBA enterprise runner, `ubuntu-latest` on the
-    # public repo. semantic-release on an enterprise runner needs npm-registry
-    # egress (Artifactory via the runner proxy/.npmrc) for `npx semantic-release`.
+    # public repo.
     runs-on: ${{ github.repository == 'CBA-General/PRep' && 'default' || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0 # semantic-release needs full history + tags
           persist-credentials: true
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
       - uses: actions/setup-node@v4
         with:
           node-version: 24 # runtime for semantic-release (requires >=24.10); build still uses bun
+
+      # Enterprise: bun + npx must resolve from Artifactory (GitHub downloads blocked).
+      - name: Setup bun (CBA enterprise)
+        if: github.repository == 'CBA-General/PRep'
+        run: |
+          set -euo pipefail
+          npm install -g bun --registry "$CBA_REGISTRY"
+          npm config set registry "$CBA_REGISTRY"
+          printf '[install]\nregistry = "%s"\n' "$CBA_REGISTRY" > "$HOME/.bunfig.toml"
+          bun --version
+      - name: Setup bun (public)
+        if: github.repository != 'CBA-General/PRep'
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
       - run: bun install --frozen-lockfile
       - run: npx semantic-release
         env:

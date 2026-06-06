@@ -5,6 +5,11 @@ on:
     branches: [main]
   pull_request:
 
+# Artifactory npm mirror — the only registry reachable from the CBA enterprise
+# runner (github.com release downloads are blocked there).
+env:
+  CBA_REGISTRY: https://artifactory.internal.cba/artifactory/api/npm/npm/
+
 jobs:
   verify:
     # CBA enterprise runners are labelled `default` (GitHub-hosted ubuntu-latest is
@@ -13,9 +18,25 @@ jobs:
     runs-on: ${{ github.repository == 'CBA-General/PRep' && 'default' || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
+
+      # --- Enterprise: setup-bun's GitHub download is blocked, so install bun from
+      # Artifactory (the @oven/bun-* binary ships as an npm package there) and point
+      # bun's own package resolution at Artifactory too. ---
+      - name: Setup bun (CBA enterprise)
+        if: github.repository == 'CBA-General/PRep'
+        run: |
+          set -euo pipefail
+          npm install -g bun --registry "$CBA_REGISTRY"
+          printf '[install]\nregistry = "%s"\n' "$CBA_REGISTRY" > "$HOME/.bunfig.toml"
+          bun --version
+
+      # --- Public repo: GitHub-hosted runner can reach the upstream download. ---
+      - name: Setup bun (public)
+        if: github.repository != 'CBA-General/PRep'
+        uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
+
       - run: bun install --frozen-lockfile
       - run: bun run lint
       - run: bun run typecheck
