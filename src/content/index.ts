@@ -37,12 +37,19 @@ let lastLearnRow: Element | null = null; // anchor for learn-mode shift+click ra
 
 // ---- quiz / explain flow ----------------------------------------------
 
+// Bumped on every new/closed request so a superseded in-flight generation (e.g.
+// the single-line request still running when you shift+click a block) never
+// renders its stale result into the current card.
+let genSeq = 0;
+
 function closeCard(): void {
+  genSeq++;
   if (currentCard) {
     currentCard.destroy();
     currentCard = null;
   }
   active = null;
+  destroyExisting();
 }
 
 function handlers(): CardHandlers {
@@ -69,15 +76,16 @@ function handlers(): CardHandlers {
 
 async function requestQuiz(): Promise<void> {
   if (!active || active.kind !== "quiz" || !currentCard) return;
+  const seq = ++genSeq;
   currentCard.showLoading();
   let resp: GenerateQuizResponse;
   try {
     resp = await sendMessage<GenerateQuizResponse>({ type: "GENERATE_QUIZ", payload: active.payload });
   } catch (e) {
-    currentCard?.showError(String(e instanceof Error ? e.message : e), true);
+    if (seq === genSeq) currentCard?.showError(String(e instanceof Error ? e.message : e), true);
     return;
   }
-  if (!currentCard || !active || active.kind !== "quiz") return; // closed while awaiting
+  if (seq !== genSeq || !currentCard || !active || active.kind !== "quiz") return; // superseded/closed
   if (!resp || !resp.ok) {
     if (resp && resp.code === "NO_KEY") currentCard.showNeedsKey();
     else currentCard.showError((resp && resp.error) || "No response from the extension.", true);
@@ -93,6 +101,7 @@ async function requestQuiz(): Promise<void> {
 
 async function requestExplain(): Promise<void> {
   if (!active || active.kind !== "explain" || !currentCard) return;
+  const seq = ++genSeq;
   currentCard.showLoading();
   let resp: GenerateExplanationResponse;
   try {
@@ -101,10 +110,10 @@ async function requestExplain(): Promise<void> {
       payload: active.payload,
     });
   } catch (e) {
-    currentCard?.showError(String(e instanceof Error ? e.message : e), true);
+    if (seq === genSeq) currentCard?.showError(String(e instanceof Error ? e.message : e), true);
     return;
   }
-  if (!currentCard || !active || active.kind !== "explain") return; // closed while awaiting
+  if (seq !== genSeq || !currentCard || !active || active.kind !== "explain") return; // superseded/closed
   if (!resp || !resp.ok) {
     if (resp && resp.code === "NO_KEY") currentCard.showNeedsKey();
     else currentCard.showError((resp && resp.error) || "No response from the extension.", true);
@@ -217,48 +226,6 @@ function onClick(e: MouseEvent): void {
 
 // ---- mode toggle -------------------------------------------------------
 
-// Persistent top-right badge so the active mode is always visible (the toast
-// only flashes on change). Click it to toggle, same as the keyboard shortcut.
-let modeBadge: HTMLDivElement | null = null;
-
-function renderModeBadge(): void {
-  if (!modeBadge) return;
-  modeBadge.textContent = mode === "learn" ? "PRep · Learn" : "PRep · Quiz";
-  modeBadge.style.borderColor = mode === "learn" ? "#3fb950" : "#ff7a17";
-}
-
-function mountModeBadge(): void {
-  if (modeBadge) return;
-  const el = document.createElement("div");
-  el.id = "pq-mode-badge";
-  Object.assign(el.style, {
-    position: "fixed",
-    top: "60px",
-    right: "12px",
-    zIndex: "9997",
-    cursor: "pointer",
-    userSelect: "none",
-    background: "#0a0a0a",
-    color: "#ffffff",
-    border: "1px solid #ff7a17",
-    borderRadius: "9999px",
-    padding: "6px 12px",
-    font: '600 12px/1 ui-monospace, "Geist Mono", SFMono-Regular, Menlo, monospace',
-    letterSpacing: "0.5px",
-    boxShadow: "0 4px 12px rgba(0,0,0,.4)",
-  });
-  el.title = "Click or press Cmd/Ctrl+Shift+L to swap Quiz / Learn mode";
-  el.addEventListener("click", () => applyMode(mode === "quiz" ? "learn" : "quiz"));
-  document.body.appendChild(el);
-  modeBadge = el;
-  renderModeBadge();
-}
-
-function unmountModeBadge(): void {
-  modeBadge?.remove();
-  modeBadge = null;
-}
-
 let toastEl: HTMLDivElement | null = null;
 let toastTimer = 0;
 
@@ -294,11 +261,16 @@ function applyMode(m: Mode): void {
   mode = m;
   lastLearnRow = null;
   void chrome.storage.local.set({ prepMode: m });
-  renderModeBadge();
   showModeToast(m);
 }
 
 function onKeydown(e: KeyboardEvent): void {
+  // Esc closes the card + highlight box.
+  if (e.key === "Escape" && currentCard) {
+    e.preventDefault();
+    closeCard();
+    return;
+  }
   // Cmd/Ctrl+Shift+L swaps Quiz <-> Learn. Chosen over Shift+Tab to avoid
   // clobbering native focus traversal / screen-reader navigation.
   if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === "L" || e.key === "l")) {
@@ -328,7 +300,6 @@ function init(): void {
   hintStyle = document.createElement("style");
   hintStyle.textContent = ".blob-code-inner, .diff-text-inner { cursor: pointer; }";
   document.head.appendChild(hintStyle);
-  mountModeBadge();
 }
 
 function teardown(): void {
@@ -341,7 +312,6 @@ function teardown(): void {
     hintStyle = null;
   }
   lastLearnRow = null;
-  unmountModeBadge();
   closeCard();
   destroyExisting();
 }
@@ -349,6 +319,16 @@ function teardown(): void {
 // Restore the persisted mode once, then wire up the page.
 void chrome.storage.local.get("prepMode").then((s) => {
   if ((s as { prepMode?: string }).prepMode === "learn") mode = "learn";
+});
+
+// Keep in sync when the mode is changed elsewhere (e.g. toggled from the popup).
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== "local" || !changes.prepMode) return;
+  const next: Mode = changes.prepMode.newValue === "learn" ? "learn" : "quiz";
+  if (next !== mode) {
+    mode = next;
+    lastLearnRow = null;
+  }
 });
 
 // Re-init on every soft navigation. init() calls teardown() first, so it is

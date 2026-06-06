@@ -37,7 +37,40 @@ h1 {
   font-size: 20px;
   font-weight: 400;
   letter-spacing: -0.4px;
-  margin: 0 0 14px;
+  margin: 0;
+}
+.head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.mode-chip {
+  flex: none;
+  margin-top: 2px;
+  padding: 5px 12px;
+  font-family: ui-monospace, "Geist Mono", SFMono-Regular, Menlo, Monaco, monospace;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  border-radius: 9999px;
+  border: 1px solid var(--sunset);
+  background: transparent;
+  color: var(--ink);
+}
+.mode-chip::before {
+  content: "● ";
+  color: var(--sunset);
+}
+.mode-chip.learn {
+  border-color: #3fb950;
+}
+.mode-chip.learn::before {
+  color: #3fb950;
+}
+.mode-chip:hover {
+  background: var(--canvas-soft);
 }
 .tip {
   margin: 0 0 4px;
