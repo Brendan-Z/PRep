@@ -37,7 +37,30 @@ h1 {
   font-size: 20px;
   font-weight: 400;
   letter-spacing: -0.4px;
-  margin: 0 0 18px;
+  margin: 0 0 14px;
+}
+.tip {
+  margin: 0 0 4px;
+  padding: 10px 12px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--body);
+  background: var(--canvas-soft);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+}
+.tip b {
+  color: var(--sunset);
+  font-weight: 600;
+}
+kbd {
+  font-family: ui-monospace, "Geist Mono", SFMono-Regular, Menlo, Monaco, monospace;
+  font-size: 11px;
+  padding: 1px 5px;
+  border: 1px solid var(--canvas-mid);
+  border-radius: 4px;
+  background: #0a0a0a;
+  color: var(--ink);
 }
 label {
   display: block;
