@@ -6,7 +6,7 @@
 // xAI design language: near-black canvas, white-pill interactives, hairline
 // borders, Inter body + monospace uppercase eyebrows. Dark only.
 
-import type { Quiz, Explanation } from "../shared/quiz";
+import type { Quiz, Explanation, FileOverview } from "../shared/quiz";
 import { fileHeaderBottom } from "./selectors";
 
 const HOST_ID = "pq-card-host";
@@ -24,6 +24,7 @@ export interface CardHandlers {
   onPrev?: () => void;
   onNext?: () => void;
   onFinish?: () => void;
+  onExplainFile?: () => void;
 }
 
 // Where the current question sits in its 1-3 question set — drives the progress
@@ -47,6 +48,7 @@ export interface CardController {
   showQuestion(quiz: Quiz, position?: QuizPosition): void;
   showResult(result: QuizResult): void;
   showExplanation(explanation: Explanation): void;
+  showFileOverview(overview: FileOverview): void;
   showError(message: string, canRetry: boolean): void;
   showNeedsKey(): void;
 }
@@ -300,6 +302,12 @@ export function openCard(
       });
   }
 
+  function wireExplainFile(): void {
+    card
+      .querySelector('[data-act="explainfile"]')
+      ?.addEventListener("click", () => handlers.onExplainFile?.());
+  }
+
   function wireStepper(): void {
     card
       .querySelector('[data-act="prev"]')
@@ -406,11 +414,32 @@ export function openCard(
             `<div class="exline"><code class="ln">${escapeHtml(l.code)}</code><p class="exp">${renderInline(l.explanation)}</p></div>`,
         )
         .join("");
+      // Offer a step up to a whole-file overview from any line/block explanation.
+      const fileFooter = `<div class="row footer"><button class="btn" data-act="explainfile">Explain whole file</button></div>`;
       card.innerHTML =
         header("What does this do?") +
         `<div class="body">` +
         `<p class="q">${renderInline(explanation.summary)}</p>` +
-        `<div class="exlines">${lines}</div>${modeHint}</div>`;
+        `<div class="exlines">${lines}</div>${fileFooter}${modeHint}</div>`;
+      wireClose();
+      wireExplainFile();
+      reposition();
+    },
+
+    showFileOverview(overview: FileOverview) {
+      // Sectioned overview of the whole file — one summary plus a handful of
+      // logical sections (function/type/responsibility), not a per-line dump.
+      const sections = overview.sections
+        .map(
+          (s) =>
+            `<div class="exline"><code class="ln">${escapeHtml(s.title)}</code><p class="exp">${renderInline(s.explanation)}</p></div>`,
+        )
+        .join("");
+      card.innerHTML =
+        header("What does this file do?") +
+        `<div class="body">` +
+        `<p class="q">${renderInline(overview.summary)}</p>` +
+        `<div class="exlines">${sections}</div>${modeHint}</div>`;
       wireClose();
       reposition();
     },

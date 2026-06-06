@@ -51,9 +51,7 @@ function fileContainer(row: Element, view: CodeView): Element | null {
     : row.closest(".js-file, [data-tagsearch-path]");
 }
 
-function fileName(row: Element, view: CodeView): string {
-  const c = fileContainer(row, view);
-  if (!c) return "";
+function fileNameFromContainer(c: Element, view: CodeView): string {
   if (view === "classic") {
     const header = c.querySelector(".file-header");
     const titleEl = c.querySelector(".file-info a[title]");
@@ -71,6 +69,11 @@ function fileName(row: Element, view: CodeView): string {
     c.querySelector("h3 a, h2 a");
   const text = candidate ? (candidate.getAttribute("title") || candidate.textContent || "").trim() : "";
   return text;
+}
+
+function fileName(row: Element, view: CodeView): string {
+  const c = fileContainer(row, view);
+  return c ? fileNameFromContainer(c, view) : "";
 }
 
 // Add/remove/context. Non-blocking metadata — the quiz only needs the code text.
@@ -170,12 +173,10 @@ export function getFileRows(row: Element): Element[] {
   return allCodeRows(container, view);
 }
 
-// Bottom edge (viewport px) of a file's sticky filename header — the bar showing the
-// path + "Viewed". The highlight box is pinned just under it so it never overlaps the
-// header or the page chrome above. Found by walking UP from the filename element to
-// its nearest sticky/fixed ancestor (class-agnostic — survives GitHub's hashed CSS).
-// Returns the container's own top as a floor when no sticky header is found.
-export function fileHeaderBottom(container: Element): number {
+// The file's header bar element (path + "Viewed"). Found by walking UP from the
+// filename element to its nearest sticky/fixed ancestor (class-agnostic — survives
+// GitHub's hashed CSS), falling back to the filename element's own header wrapper.
+export function fileHeaderEl(container: Element): Element | null {
   const nameEl =
     container.querySelector('[data-testid="file-name"]') ||
     container.querySelector(".file-header") ||
@@ -183,9 +184,52 @@ export function fileHeaderBottom(container: Element): number {
     container.querySelector("h3 a, h2 a");
   for (let el: Element | null = nameEl; el && el !== container; el = el.parentElement) {
     const pos = getComputedStyle(el).position;
-    if (pos === "sticky" || pos === "fixed") return el.getBoundingClientRect().bottom;
+    if (pos === "sticky" || pos === "fixed") return el;
   }
-  return nameEl ? nameEl.getBoundingClientRect().bottom : container.getBoundingClientRect().top;
+  return nameEl ? (nameEl.closest(".file-header") ?? nameEl.parentElement) : null;
+}
+
+// Bottom edge (viewport px) of a file's sticky filename header. The highlight box is
+// pinned just under it so it never overlaps the header or the page chrome above.
+// Returns the container's own top as a floor when no sticky header is found.
+export function fileHeaderBottom(container: Element): number {
+  const header = fileHeaderEl(container);
+  return header
+    ? header.getBoundingClientRect().bottom
+    : container.getBoundingClientRect().top;
+}
+
+// The file container nearest to an arbitrary click target (header bar, gutter, etc.),
+// for both diff views. Lets the orchestrator resolve a whole-file gesture without a
+// code row.
+export function closestFileContainer(el: Element): Element | null {
+  return el.closest(
+    '[class^="Diff-module__diffTargetable"], .js-file, [data-tagsearch-path]',
+  );
+}
+
+// True when the click landed on a file's header bar (not its diff body) — the gesture
+// for "explain the whole file".
+export function isFileHeaderClick(target: Element, container: Element): boolean {
+  if (target.closest(".diff-line-row, tr")) return false; // a code row, not the header
+  const header = fileHeaderEl(container);
+  return !!header && header.contains(target);
+}
+
+function containerView(container: Element): CodeView {
+  return container.matches('[class^="Diff-module__diffTargetable"]') ? "react" : "classic";
+}
+
+// Every code row in a file container (used for the whole-file overview + its box).
+export function getContainerRows(container: Element): Element[] {
+  return allCodeRows(container, containerView(container));
+}
+
+// File metadata from a container alone (no row needed) — for whole-file gestures.
+export function getContainerInfo(container: Element): RowInfo {
+  const view = containerView(container);
+  const name = fileNameFromContainer(container, view);
+  return { fileName: name, language: languageFromName(name), kind: "whole file" };
 }
 
 // Concatenated code text of the hunk containing `row`.

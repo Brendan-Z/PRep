@@ -1,7 +1,7 @@
 // Typed message contracts between the content script / popup (senders) and the
 // background service worker (receiver). Replaces the old stringly-typed messages.
 
-import type { Quiz, Explanation } from "./quiz";
+import type { Quiz, Explanation, FileOverview } from "./quiz";
 
 export interface QuizPayload {
   code: string;
@@ -21,6 +21,7 @@ export interface ExplainPayload {
 export type ExtensionRequest =
   | { type: "GENERATE_QUIZ"; payload: QuizPayload }
   | { type: "EXPLAIN_CODE"; payload: ExplainPayload }
+  | { type: "EXPLAIN_FILE"; payload: ExplainPayload }
   | { type: "TEST_KEY" };
 
 export type GenerateQuizResponse =
@@ -29,6 +30,10 @@ export type GenerateQuizResponse =
 
 export type GenerateExplanationResponse =
   | { ok: true; explanation: Explanation }
+  | { ok: false; error: string; code?: string };
+
+export type GenerateFileOverviewResponse =
+  | { ok: true; overview: FileOverview }
   | { ok: false; error: string; code?: string };
 
 export type TestKeyResponse = { ok: true } | { ok: false; error: string };

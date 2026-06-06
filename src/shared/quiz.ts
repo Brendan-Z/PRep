@@ -75,6 +75,43 @@ export function validateExplanation(value: unknown): Explanation | null {
   return result.success ? result.data : null;
 }
 
+// Whole-file learn output: a sectioned overview of what the file does, rather than
+// a line-by-line breakdown (which is unreadable for a full file).
+export const FileOverviewSchema = z.strictObject({
+  summary: z
+    .string()
+    .min(1)
+    .describe(
+      "One or two plain sentences: what this file does overall and its role, for a junior engineer.",
+    ),
+  sections: z
+    .array(
+      z.strictObject({
+        title: z
+          .string()
+          .min(1)
+          .describe("Short label for this logical section — a function name, type, or responsibility."),
+        explanation: z
+          .string()
+          .min(1)
+          .describe("Plain-language explanation of what this section does and why it matters."),
+      }),
+    )
+    .min(1)
+    .max(8)
+    .describe(
+      "A handful of logical sections (grouped by function/type/responsibility), in source order — " +
+        "NOT one entry per line. Aim for the few sections that matter most.",
+    ),
+});
+
+export type FileOverview = z.infer<typeof FileOverviewSchema>;
+
+export function validateFileOverview(value: unknown): FileOverview | null {
+  const result = FileOverviewSchema.safeParse(value);
+  return result.success ? result.data : null;
+}
+
 // JSON Schema for the Portkey/Claude tool-call parameters. Strip the $schema
 // marker — Portkey wants a bare parameters object.
 function buildJsonSchema(): Record<string, unknown> {
@@ -93,6 +130,12 @@ export const QUIZ_SET_JSON_SCHEMA = ((): Record<string, unknown> => {
 
 export const EXPLANATION_JSON_SCHEMA = ((): Record<string, unknown> => {
   const schema = z.toJSONSchema(ExplanationSchema) as Record<string, unknown>;
+  delete schema.$schema;
+  return schema;
+})();
+
+export const FILE_OVERVIEW_JSON_SCHEMA = ((): Record<string, unknown> => {
+  const schema = z.toJSONSchema(FileOverviewSchema) as Record<string, unknown>;
   delete schema.$schema;
   return schema;
 })();

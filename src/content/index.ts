@@ -14,6 +14,7 @@ import {
   sendMessage,
   type GenerateQuizResponse,
   type GenerateExplanationResponse,
+  type GenerateFileOverviewResponse,
   type QuizPayload,
   type ExplainPayload,
 } from "../shared/messages";
@@ -30,7 +31,8 @@ type Active =
       quizzes: Quiz[] | null;
       index: number; // cursor into quizzes for the "Next question" stepper
     }
-  | { kind: "explain"; payload: ExplainPayload; rows: Element[] };
+  | { kind: "explain"; payload: ExplainPayload; rows: Element[]; container: Element | null }
+  | { kind: "fileexplain"; payload: ExplainPayload; rows: Element[]; container: Element | null };
 
 let lifecycle: AbortController | null = null; // AbortController for the active page
 let hintStyle: HTMLStyleElement | null = null; // injected "this is clickable" cursor hint
@@ -69,7 +71,13 @@ function handlers(): CardHandlers {
     onRetry: () => {
       if (!active) return;
       if (active.kind === "quiz") requestQuiz();
+      else if (active.kind === "fileexplain") requestFileOverview();
       else requestExplain();
+    },
+    onExplainFile: () => {
+      if (!active || active.kind === "quiz") return;
+      const container = active.container ?? selectors.closestFileContainer(active.rows[0]);
+      if (container) openFileOverview(container);
     },
     onAnswer: (idx) => grade(idx),
     onPrev: () => {
@@ -151,6 +159,29 @@ async function requestExplain(): Promise<void> {
   currentCard.showExplanation(resp.explanation);
 }
 
+async function requestFileOverview(): Promise<void> {
+  if (!active || active.kind !== "fileexplain" || !currentCard) return;
+  const seq = ++genSeq;
+  currentCard.showLoading();
+  let resp: GenerateFileOverviewResponse;
+  try {
+    resp = await sendMessage<GenerateFileOverviewResponse>({
+      type: "EXPLAIN_FILE",
+      payload: active.payload,
+    });
+  } catch (e) {
+    if (seq === genSeq) currentCard?.showError(String(e instanceof Error ? e.message : e), true);
+    return;
+  }
+  if (seq !== genSeq || !currentCard || !active || active.kind !== "fileexplain") return; // superseded/closed
+  if (!resp || !resp.ok) {
+    if (resp && resp.code === "NO_KEY") currentCard.showNeedsKey();
+    else currentCard.showError((resp && resp.error) || "No response from the extension.", true);
+    return;
+  }
+  currentCard.showFileOverview(resp.overview);
+}
+
 function grade(idx: number): void {
   if (!active || active.kind !== "quiz" || !active.quizzes || !currentCard) return;
   const quiz = active.quizzes[active.index];
@@ -188,11 +219,28 @@ function showCachedQuiz(
   showCurrentQuestion();
 }
 
-function openExplain(rows: Element[], payload: ExplainPayload): void {
+function openExplain(rows: Element[], payload: ExplainPayload, container: Element | null): void {
   closeCard();
-  active = { kind: "explain", payload, rows };
+  active = { kind: "explain", payload, rows, container };
   currentCard = openCard(rows, handlers(), "learn");
   requestExplain();
+}
+
+function openFileOverview(container: Element): void {
+  const rows = selectors.getContainerRows(container);
+  if (!rows.length) return;
+  const code = selectors.getRowsText(rows, 12000);
+  if (!code) return;
+  const info = selectors.getContainerInfo(container);
+  closeCard();
+  active = {
+    kind: "fileexplain",
+    payload: { code, fileName: info.fileName, language: info.language, kind: "file" },
+    rows,
+    container,
+  };
+  currentCard = openCard(rows, handlers(), "learn");
+  requestFileOverview();
 }
 
 // ---- click handling ----------------------------------------------------
@@ -218,7 +266,17 @@ function onClick(e: MouseEvent): void {
   }
 
   const rowEl = target.closest(".diff-line-row, tr");
-  if (!rowEl) return;
+  if (!rowEl) {
+    // Learn mode: clicking a file's header bar (not a code row) explains the
+    // WHOLE file. Quiz mode already covers the whole file per click.
+    if (mode === "learn") {
+      const headerContainer = selectors.closestFileContainer(target);
+      if (headerContainer && selectors.isFileHeaderClick(target, headerContainer)) {
+        openFileOverview(headerContainer);
+      }
+    }
+    return;
+  }
   const view = selectors.rowView(rowEl);
   if (!selectors.isCodeRow(rowEl, view)) return;
   const container = selectors.getFileContainer(rowEl);
@@ -266,7 +324,7 @@ function onClick(e: MouseEvent): void {
   const code = selectors.getRowsText(rows);
   if (!code) return;
   const info = selectors.getRowInfo(rowEl);
-  openExplain(rows, { code, fileName: info.fileName, language: info.language, kind });
+  openExplain(rows, { code, fileName: info.fileName, language: info.language, kind }, container);
 }
 
 // ---- mode toggle -------------------------------------------------------
