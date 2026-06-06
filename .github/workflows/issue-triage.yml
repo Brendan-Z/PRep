@@ -44,7 +44,7 @@ jobs:
         # Org mirror of anthropics/claude-code-action (allowlisted in CBA-General).
         # It wraps the Claude Code CLI — the prompt_file + allowedTools below ARE
         # the pipeline; no skills required.
-        uses: CBA-General/claude-code-action@beta
+        uses: CBA-General/claude-code-action@1f3b47e8874073280d96d5cc2d209504b14de1a5 # main @ 2026-06-07; review before bumping
         env:
           # Route Claude Code through the CBA Portkey gateway (Bedrock-backed).
           # Confirmed CBA pattern: ANTHROPIC_BASE_URL=https://portkey.aipe.cba
