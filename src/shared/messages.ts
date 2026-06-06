@@ -24,7 +24,7 @@ export type ExtensionRequest =
   | { type: "TEST_KEY" };
 
 export type GenerateQuizResponse =
-  | { ok: true; quiz: Quiz }
+  | { ok: true; quizzes: Quiz[] }
   | { ok: false; error: string; code?: string };
 
 export type GenerateExplanationResponse =

@@ -7,6 +7,7 @@
 // borders, Inter body + monospace uppercase eyebrows. Dark only.
 
 import type { Quiz, Explanation } from "../shared/quiz";
+import { fileHeaderBottom } from "./selectors";
 
 const HOST_ID = "pq-card-host";
 const BOX_ID = "pq-box";
@@ -20,7 +21,16 @@ export interface CardHandlers {
   onClose?: () => void;
   onRetry?: () => void;
   onAnswer?: (index: number) => void;
-  onNewQuestion?: () => void;
+  onPrev?: () => void;
+  onNext?: () => void;
+  onFinish?: () => void;
+}
+
+// Where the current question sits in its 1-3 question set — drives the progress
+// eyebrow and whether a "Next question" button is shown.
+export interface QuizPosition {
+  index: number;
+  total: number;
 }
 
 export interface QuizResult {
@@ -34,9 +44,9 @@ export interface CardController {
   reposition(): void;
   destroy(): void;
   showLoading(): void;
-  showQuestion(quiz: Quiz): void;
+  showQuestion(quiz: Quiz, position?: QuizPosition): void;
   showResult(result: QuizResult): void;
-  showExplanation(explanation: Explanation, code: string): void;
+  showExplanation(explanation: Explanation): void;
   showError(message: string, canRetry: boolean): void;
   showNeedsKey(): void;
 }
@@ -97,14 +107,6 @@ const CSS = `
     background: #1a1c20; border: 1px solid #2a2d33; color: #ffb27a;
   }
   em { font-style: italic; color: #ffffff; }
-  .exfull {
-    margin: 0 0 14px; padding: 10px 12px; overflow-x: auto;
-    background: #141414; border: 1px solid #212327; border-radius: 6px;
-  }
-  .exfull code {
-    background: none; border: none; padding: 0; color: #dadbdf;
-    font-size: 12.5px; line-height: 1.55; white-space: pre;
-  }
   .exlines { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
   .exline { border-left: 2px solid #ff7a17; padding-left: 12px; }
   .exline .ln {
@@ -119,8 +121,12 @@ const CSS = `
   .btn:hover { background: #1a1c20; }
   .btn.primary { background: #ffffff; border-color: #ffffff; color: #0a0a0a; }
   .btn.primary:hover { background: #fafaf7; }
+  .btn:disabled { opacity: .4; cursor: default; }
+  .btn:disabled:hover { background: transparent; }
   .row { display: flex; gap: 8px; align-items: center; }
-  .footer { margin-top: 16px; padding-top: 14px; border-top: 1px solid #212327; }
+  .footer { margin-top: 16px; padding-top: 14px; border-top: 1px solid #212327; justify-content: flex-end; }
+  /* Previous sits hard-left; Next/Finish stays right. */
+  .footer .prev { margin-right: auto; }
   .hint { margin: 12px 0 0; font-size: 12px; line-height: 1.6; color: #7d8187; }
   .hint kbd {
     font-family: ui-monospace, "Geist Mono", SFMono-Regular, Menlo, Monaco, monospace;
@@ -154,6 +160,7 @@ function renderExplanation(s: string): string {
   return renderInline(s).replace(/\s+(Option\s+(?:[A-D]|\d+)\b)/g, "<br><br>$1");
 }
 
+// Union (viewport coords) of a set of rows — the extent of the highlighted code.
 function unionRect(rows: Element[]): { top: number; left: number; right: number; bottom: number } {
   let top = Infinity,
     left = Infinity,
@@ -174,17 +181,27 @@ export function destroyExisting(): void {
   document.getElementById(BOX_ID)?.remove();
 }
 
-export function openCard(rows: Element[], handlers: CardHandlers = {}): CardController {
+export type CardMode = "quiz" | "learn";
+
+export function openCard(
+  rows: Element[],
+  handlers: CardHandlers = {},
+  mode: CardMode = "quiz",
+): CardController {
   // Singleton: remove any prior card/box.
   destroyExisting();
+
+  const isLearn = mode === "learn";
+  // Learn mode highlights in green, quiz in the brand orange.
+  const accent = isLearn ? "#3fb950" : "#ff7a17";
 
   const box = document.createElement("div");
   box.id = BOX_ID;
   Object.assign(box.style, {
-    position: "absolute",
-    border: "2px solid #ff7a17",
+    position: "fixed",
+    border: `2px solid ${accent}`,
     borderRadius: "8px",
-    boxShadow: "0 0 0 4px rgba(255,122,23,.15)",
+    boxShadow: `0 0 0 4px ${isLearn ? "rgba(63,185,80,.15)" : "rgba(255,122,23,.15)"}`,
     pointerEvents: "none",
     zIndex: "9998",
   });
@@ -203,34 +220,43 @@ export function openCard(rows: Element[], handlers: CardHandlers = {}): CardCont
 
   function reposition(): void {
     if (!rows.length) return;
-    const u = unionRect(rows); // viewport coordinates
     const vw = document.documentElement.clientWidth;
     const vh = document.documentElement.clientHeight;
     const margin = 12;
 
-    // Card first: it hovers fixed on the right so the code stays readable while
-    // answering. Track the hunk vertically but clamp fully inside the viewport.
-    const cardH = card.getBoundingClientRect().height;
-    const maxTop = Math.max(margin, vh - cardH - margin);
-    host.style.position = "fixed";
-    host.style.left = "auto";
-    host.style.right = margin + "px";
-    host.style.top = Math.min(Math.max(u.top, margin), maxTop) + "px";
-    // Highlight box: the FULL hunk, positioned in document coordinates so it
-    // scrolls naturally with the code (top stays glued to the real first row —
-    // no pinning under the sticky page header). Only the width is clamped to the
-    // file container/viewport so a wide diff can't paint the box off the right
-    // edge of the page.
-    const sx = window.scrollX;
-    const sy = window.scrollY;
+    // Highlight box: hug the actual highlighted code (the clicked hunk in quiz
+    // mode, the clicked line/block in learn mode), clamped to the file container's
+    // width and pinned just UNDER that file's sticky filename header so the top
+    // border never crosses the header or the page chrome above it. Fixed
+    // positioning = pure viewport coordinates, no scroll math. Hidden when the
+    // selection is fully scrolled out of view; reappears when it scrolls back.
     const container = rows[0].closest(CONTAINER_SEL);
     const cb = container?.getBoundingClientRect();
-    const left = Math.max(u.left, cb ? cb.left : 0);
+    const u = unionRect(rows);
+    const left = Math.max(u.left, cb ? cb.left : 0, 0);
     const right = Math.min(u.right, cb ? cb.right : vw, vw);
-    box.style.top = u.top + sy - 2 + "px";
-    box.style.left = left + sx - 2 + "px";
-    box.style.width = Math.max(0, right - left) + 4 + "px";
-    box.style.height = u.bottom - u.top + 4 + "px";
+    const top = Math.max(u.top, container ? fileHeaderBottom(container) : 0, 0);
+    const bottom = Math.min(u.bottom, vh);
+    if (bottom <= top || right <= left) {
+      box.style.display = "none";
+    } else {
+      box.style.display = "block";
+      box.style.top = top - 2 + "px";
+      box.style.left = left - 2 + "px";
+      box.style.width = right - left + 4 + "px";
+      box.style.height = bottom - top + 4 + "px";
+    }
+
+    // Card: fixed in the bottom-right, nested just INSIDE the file column's right
+    // edge (not the viewport's) so the popup sits within the file's outline rather
+    // than poking past it. Anchored to the column right, not the selection box,
+    // so it stays put regardless of how small the highlighted code is.
+    const colRight = Math.min(cb ? cb.right : vw, vw);
+    host.style.position = "fixed";
+    host.style.left = "auto";
+    host.style.top = "auto";
+    host.style.right = Math.max(margin, vw - colRight + margin) + "px";
+    host.style.bottom = margin + "px";
   }
 
   let rafId = 0;
@@ -261,7 +287,8 @@ export function openCard(rows: Element[], handlers: CardHandlers = {}): CardCont
   }
 
   function header(title: string): string {
-    return `<div class="hd"><span class="dot"></span><span class="title">${escapeHtml(title)}</span><span class="spacer"></span><button class="x" data-act="close" title="Close">×</button></div>`;
+    // Dot is colour-coded by mode: green for learn, orange for quiz.
+    return `<div class="hd"><span class="dot" style="background:${accent}"></span><span class="title">${escapeHtml(title)}</span><span class="spacer"></span><button class="x" data-act="close" title="Close">×</button></div>`;
   }
 
   function wireClose(): void {
@@ -273,13 +300,34 @@ export function openCard(rows: Element[], handlers: CardHandlers = {}): CardCont
       });
   }
 
-  function wireNewQuestion(): void {
-    const b = card.querySelector('[data-act="new"]');
-    if (b) b.addEventListener("click", () => handlers.onNewQuestion?.());
+  function wireStepper(): void {
+    card
+      .querySelector('[data-act="prev"]')
+      ?.addEventListener("click", () => handlers.onPrev?.());
+    card
+      .querySelector('[data-act="next"]')
+      ?.addEventListener("click", () => handlers.onNext?.());
+    card
+      .querySelector('[data-act="finish"]')
+      ?.addEventListener("click", () => handlers.onFinish?.());
   }
 
-  // Footer with a "New question" button — regenerates a fresh quiz for the file.
-  const newQuestionFooter = `<div class="row footer"><button class="btn" data-act="new">New question</button></div>`;
+  // Stepper footer: "← Previous" hard-left (shown only in a multi-question set,
+  // disabled on the first), and on the right either "Next question →" or, on the
+  // last question, "Finish" (which closes the card).
+  function stepperFooter(position?: QuizPosition): string {
+    if (!position) return "";
+    const { index, total } = position;
+    const prev =
+      total > 1
+        ? `<button class="btn prev" data-act="prev"${index <= 0 ? " disabled" : ""}>← Previous</button>`
+        : "";
+    const right =
+      index >= total - 1
+        ? `<button class="btn primary" data-act="finish">Finish</button>`
+        : `<button class="btn primary" data-act="next">Next question →</button>`;
+    return `<div class="row footer">${prev}${right}</div>`;
+  }
   // Shortcut reminder shown at the bottom of every card view.
   const modeHint = `<p class="hint">Press <kbd>⌘⇧L</kbd> (or <kbd>Ctrl⇧L</kbd>) to swap between Quiz and Learn mode.</p>`;
 
@@ -289,24 +337,28 @@ export function openCard(rows: Element[], handlers: CardHandlers = {}): CardCont
 
     showLoading() {
       card.innerHTML =
-        header("PRep") +
-        `<div class="body"><div class="row muted"><span class="spinner"></span><span>Generating a question…</span></div></div>`;
+        header(isLearn ? "PRep · Learning" : "PRep · Quiz") +
+        `<div class="body"><div class="row muted"><span class="spinner"></span><span>Generating ${isLearn ? "an explanation" : "a question"}…</span></div></div>`;
       wireClose();
       reposition();
     },
 
-    showQuestion(quiz: Quiz) {
+    showQuestion(quiz: Quiz, position?: QuizPosition) {
       const opts = quiz.options
         .map(
           (o, i) =>
             `<button class="opt" data-index="${i}"><span class="key">${"ABCD"[i]}</span><span>${renderInline(o)}</span></button>`,
         )
         .join("");
+      const title =
+        position && position.total > 1
+          ? `Question ${position.index + 1} of ${position.total}`
+          : "What does this code do?";
       card.innerHTML =
-        header("What does this code do?") +
-        `<div class="body"><p class="q">${renderInline(quiz.question)}</p><div class="opts">${opts}</div>${newQuestionFooter}${modeHint}</div>`;
+        header(title) +
+        `<div class="body"><p class="q">${renderInline(quiz.question)}</p><div class="opts">${opts}</div>${stepperFooter(position)}${modeHint}</div>`;
       wireClose();
-      wireNewQuestion();
+      wireStepper();
       card.querySelectorAll<HTMLButtonElement>(".opt").forEach((btn) => {
         btn.addEventListener("click", () => {
           const idx = Number(btn.dataset.index);
@@ -345,9 +397,9 @@ export function openCard(rows: Element[], handlers: CardHandlers = {}): CardCont
       reposition();
     },
 
-    showExplanation(explanation: Explanation, code: string) {
-      // One full code block up top, then short per-line notes below — not a
-      // separate code block per line (that was noisy for multi-line selections).
+    showExplanation(explanation: Explanation) {
+      // No full code block — the highlighted GitHub hunk is already visible.
+      // Just the summary, then short per-line notes below.
       const lines = explanation.lines
         .map(
           (l) =>
@@ -356,7 +408,7 @@ export function openCard(rows: Element[], handlers: CardHandlers = {}): CardCont
         .join("");
       card.innerHTML =
         header("What does this do?") +
-        `<div class="body"><pre class="exfull"><code>${escapeHtml(code)}</code></pre>` +
+        `<div class="body">` +
         `<p class="q">${renderInline(explanation.summary)}</p>` +
         `<div class="exlines">${lines}</div>${modeHint}</div>`;
       wireClose();

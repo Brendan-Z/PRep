@@ -8,7 +8,7 @@ import type { ExtensionRequest } from "../shared/messages";
 chrome.runtime.onMessage.addListener((message: ExtensionRequest, _sender, sendResponse) => {
   if (message?.type === "GENERATE_QUIZ") {
     generateQuiz(message.payload)
-      .then((quiz) => sendResponse({ ok: true, quiz }))
+      .then((quizzes) => sendResponse({ ok: true, quizzes }))
       .catch((e: unknown) => {
         const err = e as { message?: string; code?: string };
         sendResponse({ ok: false, error: String(err?.message ?? e), code: err?.code });

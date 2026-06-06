@@ -170,6 +170,24 @@ export function getFileRows(row: Element): Element[] {
   return allCodeRows(container, view);
 }
 
+// Bottom edge (viewport px) of a file's sticky filename header — the bar showing the
+// path + "Viewed". The highlight box is pinned just under it so it never overlaps the
+// header or the page chrome above. Found by walking UP from the filename element to
+// its nearest sticky/fixed ancestor (class-agnostic — survives GitHub's hashed CSS).
+// Returns the container's own top as a floor when no sticky header is found.
+export function fileHeaderBottom(container: Element): number {
+  const nameEl =
+    container.querySelector('[data-testid="file-name"]') ||
+    container.querySelector(".file-header") ||
+    container.querySelector("a[title]") ||
+    container.querySelector("h3 a, h2 a");
+  for (let el: Element | null = nameEl; el && el !== container; el = el.parentElement) {
+    const pos = getComputedStyle(el).position;
+    if (pos === "sticky" || pos === "fixed") return el.getBoundingClientRect().bottom;
+  }
+  return nameEl ? nameEl.getBoundingClientRect().bottom : container.getBoundingClientRect().top;
+}
+
 // Concatenated code text of the hunk containing `row`.
 export function getHunkText(row: Element): string {
   const view = rowView(row);

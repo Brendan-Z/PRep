@@ -1,9 +1,10 @@
 // Orchestrator. Runs in the page (semi-trusted; never sees the API key).
 //
 // Two modes, toggled with Cmd/Ctrl+Shift+L:
-//   - Quiz  (default): click a changed line -> resolve its hunk -> one multiple-
-//     choice question PER FILE (generated once, cached; clicking other lines in
-//     the same file reuses it).
+//   - Quiz  (default): click a changed line -> resolve its hunk -> a SET of 1-3
+//     multiple-choice questions PER FILE (count scales with the change's size /
+//     complexity; generated once, cached; clicking other lines in the same file
+//     reuses the set). A "Next question" button steps through the set.
 //   - Learn: click a line -> plain-language explanation of that line; shift+click
 //     another line -> explanation of the block between them.
 
@@ -21,7 +22,14 @@ import type { Quiz } from "../shared/quiz";
 type Mode = "quiz" | "learn";
 
 type Active =
-  | { kind: "quiz"; payload: QuizPayload; rows: Element[]; container: Element | null; quiz: Quiz | null }
+  | {
+      kind: "quiz";
+      payload: QuizPayload;
+      rows: Element[];
+      container: Element | null;
+      quizzes: Quiz[] | null;
+      index: number; // cursor into quizzes for the "Next question" stepper
+    }
   | { kind: "explain"; payload: ExplainPayload; rows: Element[] };
 
 let lifecycle: AbortController | null = null; // AbortController for the active page
@@ -30,9 +38,9 @@ let currentCard: CardController | null = null; // active card controller
 let active: Active | null = null;
 
 let mode: Mode = "quiz";
-// One quiz per file, generated once. Keyed by the file container element so it is
-// naturally dropped when GitHub swaps the DOM on navigation.
-const quizCache = new WeakMap<Element, { quiz: Quiz; rows: Element[]; payload: QuizPayload }>();
+// One quiz SET per file, generated once. Keyed by the file container element so it
+// is naturally dropped when GitHub swaps the DOM on navigation.
+const quizCache = new WeakMap<Element, { quizzes: Quiz[]; rows: Element[]; payload: QuizPayload }>();
 let lastLearnRow: Element | null = null; // anchor for learn-mode shift+click ranges
 
 // ---- quiz / explain flow ----------------------------------------------
@@ -64,14 +72,30 @@ function handlers(): CardHandlers {
       else requestExplain();
     },
     onAnswer: (idx) => grade(idx),
-    onNewQuestion: () => {
-      if (!active || active.kind !== "quiz") return;
-      // Drop the cached quiz for this file and regenerate a fresh one.
-      if (active.container) quizCache.delete(active.container);
-      active.quiz = null;
-      requestQuiz();
+    onPrev: () => {
+      if (!active || active.kind !== "quiz" || !active.quizzes) return;
+      if (active.index <= 0) return; // already on the first one
+      active.index--;
+      showCurrentQuestion();
     },
+    onNext: () => {
+      if (!active || active.kind !== "quiz" || !active.quizzes) return;
+      if (active.index >= active.quizzes.length - 1) return; // already on the last one
+      active.index++;
+      showCurrentQuestion();
+    },
+    onFinish: () => closeCard(),
   };
+}
+
+// Render the question at the current cursor, with its position in the set so the
+// card can show "Question X of Y" and decide whether a "Next question" button fits.
+function showCurrentQuestion(): void {
+  if (!active || active.kind !== "quiz" || !active.quizzes || !currentCard) return;
+  currentCard.showQuestion(active.quizzes[active.index], {
+    index: active.index,
+    total: active.quizzes.length,
+  });
 }
 
 async function requestQuiz(): Promise<void> {
@@ -91,12 +115,17 @@ async function requestQuiz(): Promise<void> {
     else currentCard.showError((resp && resp.error) || "No response from the extension.", true);
     return;
   }
-  active.quiz = resp.quiz;
-  // Cache so other lines in the same file reuse this quiz instead of regenerating.
+  active.quizzes = resp.quizzes;
+  active.index = 0;
+  // Cache so other lines in the same file reuse this set instead of regenerating.
   if (active.container) {
-    quizCache.set(active.container, { quiz: resp.quiz, rows: active.rows, payload: active.payload });
+    quizCache.set(active.container, {
+      quizzes: resp.quizzes,
+      rows: active.rows,
+      payload: active.payload,
+    });
   }
-  currentCard.showQuestion(resp.quiz);
+  showCurrentQuestion();
 }
 
 async function requestExplain(): Promise<void> {
@@ -119,41 +148,50 @@ async function requestExplain(): Promise<void> {
     else currentCard.showError((resp && resp.error) || "No response from the extension.", true);
     return;
   }
-  currentCard.showExplanation(resp.explanation, active.payload.code);
+  currentCard.showExplanation(resp.explanation);
 }
 
 function grade(idx: number): void {
-  if (!active || active.kind !== "quiz" || !active.quiz || !currentCard) return;
-  const correct = idx === active.quiz.correctIndex;
+  if (!active || active.kind !== "quiz" || !active.quizzes || !currentCard) return;
+  const quiz = active.quizzes[active.index];
+  if (!quiz) return;
+  const correct = idx === quiz.correctIndex;
   currentCard.showResult({
     correct,
     chosenIndex: idx,
-    correctIndex: active.quiz.correctIndex,
-    explanation: active.quiz.explanation,
+    correctIndex: quiz.correctIndex,
+    explanation: quiz.explanation,
   });
 }
 
 function openQuiz(rows: Element[], payload: QuizPayload, container: Element | null): void {
   closeCard();
-  active = { kind: "quiz", payload, rows, container, quiz: null };
-  currentCard = openCard(rows, handlers());
+  active = { kind: "quiz", payload, rows, container, quizzes: null, index: 0 };
+  currentCard = openCard(rows, handlers(), "quiz");
   requestQuiz();
 }
 
 function showCachedQuiz(
-  cached: { quiz: Quiz; rows: Element[]; payload: QuizPayload },
+  cached: { quizzes: Quiz[]; rows: Element[]; payload: QuizPayload },
   container: Element | null,
 ): void {
   closeCard();
-  active = { kind: "quiz", payload: cached.payload, rows: cached.rows, container, quiz: cached.quiz };
-  currentCard = openCard(cached.rows, handlers());
-  currentCard.showQuestion(cached.quiz);
+  active = {
+    kind: "quiz",
+    payload: cached.payload,
+    rows: cached.rows,
+    container,
+    quizzes: cached.quizzes,
+    index: 0,
+  };
+  currentCard = openCard(cached.rows, handlers(), "quiz");
+  showCurrentQuestion();
 }
 
 function openExplain(rows: Element[], payload: ExplainPayload): void {
   closeCard();
   active = { kind: "explain", payload, rows };
-  currentCard = openCard(rows, handlers());
+  currentCard = openCard(rows, handlers(), "learn");
   requestExplain();
 }
 
@@ -193,15 +231,22 @@ function onClick(e: MouseEvent): void {
       showCachedQuiz(cached, container);
       return;
     }
-    // Quiz covers the WHOLE file (all hunks), so a change that depends on code
-    // elsewhere in the same file is captured. Fall back to the clicked hunk if
-    // the file container can't be resolved.
-    const rows = container ? selectors.getFileRows(rowEl) : selectors.getHunkRows(rowEl);
-    if (!rows.length) return;
-    const code = container ? selectors.getRowsText(rows, 12000) : selectors.getHunkText(rowEl);
+    // The QUESTION covers the WHOLE file (all hunks), so a change that depends on
+    // code elsewhere in the same file is captured. Fall back to the clicked hunk
+    // if the file container can't be resolved.
+    const fileRows = container ? selectors.getFileRows(rowEl) : selectors.getHunkRows(rowEl);
+    if (!fileRows.length) return;
+    const code = container ? selectors.getRowsText(fileRows, 12000) : selectors.getHunkText(rowEl);
     if (!code) return;
+    // The BOX, however, outlines only the clicked hunk — outlining the whole file
+    // produced a viewport-tall rail that painted across the sticky header on scroll.
+    const boxRows = selectors.getHunkRows(rowEl);
     const info = selectors.getRowInfo(rowEl);
-    openQuiz(rows, { code, fileName: info.fileName, language: info.language, kind: "file changes" }, container);
+    openQuiz(
+      boxRows.length ? boxRows : fileRows,
+      { code, fileName: info.fileName, language: info.language, kind: "file changes" },
+      container,
+    );
     return;
   }
 

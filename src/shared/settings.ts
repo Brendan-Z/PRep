@@ -10,11 +10,14 @@ export interface Settings {
 }
 
 export const DEFAULTS = {
-  baseUrl: "https://api.portkey.ai/v1",
-  provider: "@bedrock-eus1",
-  // Bedrock Claude Sonnet 4.6 (US cross-region inference profile). Confirm the
-  // exact id for your account in the popup — this is a sensible placeholder.
-  model: "us.anthropic.claude-sonnet-4-6-20250929-v1:0",
+  baseUrl: "https://portkey.aipe.cba/v1",
+  // Empty: the model below is a full Model-Catalog slug ("@provider/model"), so it
+  // already carries the provider — sending a separate x-portkey-provider header
+  // would conflict with it.
+  provider: "",
+  // Bedrock Claude Haiku 4.5 (US cross-region inference profile), routed via the
+  // @bedrock-eus2 Model-Catalog provider. Confirm the exact id in the popup.
+  model: "@bedrock-eus2/us.anthropic.claude-haiku-4-5-20251001-v1:0",
 } as const;
 
 type StoredSettings = Record<string, string | undefined>;

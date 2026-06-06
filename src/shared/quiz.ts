@@ -26,6 +26,28 @@ export function validateQuiz(value: unknown): Quiz | null {
   return result.success ? result.data : null;
 }
 
+// A set of 1–3 questions for one file change. The model picks the count from the
+// size/complexity of the change — a one-line tweak gets 1, a large multi-function
+// change gets up to 3.
+export const QuizSetSchema = z.strictObject({
+  questions: z
+    .array(QuizSchema)
+    .min(1)
+    .max(3)
+    .describe(
+      "Ordered questions. DEFAULT TO EXACTLY 1 — most changes warrant a single question. Add a 2nd " +
+        "or 3rd ONLY for genuinely distinct behaviours that each deserve their own question; a small " +
+        "or single-purpose change MUST get exactly 1. At most 3, and never pad to reach 3.",
+    ),
+});
+
+export type QuizSet = z.infer<typeof QuizSetSchema>;
+
+export function validateQuizSet(value: unknown): QuizSet | null {
+  const result = QuizSetSchema.safeParse(value);
+  return result.success ? result.data : null;
+}
+
 // Learn-mode output: a teaching breakdown of the selected line(s) for a junior.
 export const ExplanationSchema = z.strictObject({
   summary: z
@@ -62,6 +84,12 @@ function buildJsonSchema(): Record<string, unknown> {
 }
 
 export const QUIZ_JSON_SCHEMA = buildJsonSchema();
+
+export const QUIZ_SET_JSON_SCHEMA = ((): Record<string, unknown> => {
+  const schema = z.toJSONSchema(QuizSetSchema) as Record<string, unknown>;
+  delete schema.$schema;
+  return schema;
+})();
 
 export const EXPLANATION_JSON_SCHEMA = ((): Record<string, unknown> => {
   const schema = z.toJSONSchema(ExplanationSchema) as Record<string, unknown>;
