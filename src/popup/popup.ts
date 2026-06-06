@@ -6,6 +6,32 @@ import { sendMessage, type TestKeyResponse } from "../shared/messages";
 
 const input = (id: string): HTMLInputElement => document.getElementById(id) as HTMLInputElement;
 const statusEl = document.getElementById("status")!;
+const modeChip = document.getElementById("mode") as HTMLButtonElement;
+
+type Mode = "quiz" | "learn";
+
+function renderMode(m: Mode): void {
+  modeChip.textContent = m === "learn" ? "Learn" : "Quiz";
+  modeChip.classList.toggle("learn", m === "learn");
+}
+
+async function loadMode(): Promise<void> {
+  const s = (await chrome.storage.local.get("prepMode")) as { prepMode?: string };
+  renderMode(s.prepMode === "learn" ? "learn" : "quiz");
+}
+
+modeChip.addEventListener("click", async () => {
+  const next: Mode = modeChip.classList.contains("learn") ? "quiz" : "learn";
+  renderMode(next);
+  await chrome.storage.local.set({ prepMode: next });
+});
+
+// Reflect changes made elsewhere (the on-page Cmd/Ctrl+Shift+L shortcut).
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === "local" && changes.prepMode) {
+    renderMode(changes.prepMode.newValue === "learn" ? "learn" : "quiz");
+  }
+});
 
 function setStatus(msg: string, kind = ""): void {
   statusEl.textContent = msg || "";
@@ -45,3 +71,4 @@ document.getElementById("test")!.addEventListener("click", async () => {
 });
 
 load();
+loadMode();
