@@ -15,7 +15,10 @@ permissions:
 
 jobs:
   release:
-    runs-on: ubuntu-latest
+    # See ci.yml: `default` on the CBA enterprise runner, `ubuntu-latest` on the
+    # public repo. semantic-release on an enterprise runner needs npm-registry
+    # egress (Artifactory via the runner proxy/.npmrc) for `npx semantic-release`.
+    runs-on: ${{ github.repository == 'CBA-General/PRep' && 'default' || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
         with:

@@ -22,13 +22,13 @@ jobs:
     if: >-
       github.repository == 'CBA-General/PRep' &&
       contains(github.event.issue.labels.*.name, 'feedback')
-    # SECURITY: issue title/body are attacker-controlled (any org member can open a
-    # feedback issue). Run this on an EPHEMERAL, sandboxed self-hosted runner whose
-    # only network egress is the Portkey gateway + api.github.com — the runner is
-    # reused for nothing else. The narrow tool allow/deny-list below + the
+    # CBA enterprise runner (label `default`). SECURITY: issue title/body are
+    # attacker-controlled (any org member can open a feedback issue). Prefer an
+    # EPHEMERAL, job-isolated runner whose only egress is the Portkey gateway +
+    # the enterprise GitHub API. The narrow tool allow/deny-list below + the
     # "untrusted input" rule in the agent prompt are defence-in-depth, not a
     # substitute for that isolation.
-    runs-on: [self-hosted, cba, ephemeral]
+    runs-on: default
     steps:
       - uses: actions/checkout@v4
         with:

@@ -7,7 +7,10 @@ on:
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    # CBA enterprise runners are labelled `default` (GitHub-hosted ubuntu-latest is
+    # not available there); the public repo has no `default` runner. Pick per repo
+    # so CI is green both before and after the move to CBA-General/PRep.
+    runs-on: ${{ github.repository == 'CBA-General/PRep' && 'default' || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
