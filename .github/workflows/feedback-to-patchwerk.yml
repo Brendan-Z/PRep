@@ -1,0 +1,49 @@
+name: Feedback → Patchwerk
+
+# When a feedback issue is opened (the extension always adds the `feedback` label),
+# post a `@patchwerk` comment so patchwerk-cloud triages it (pw-triage) and, if
+# relevant, implements it + opens a PR (pw-fix-github-issue), then validates with
+# the verify-extension-feature skill.
+#
+# Gated to CBA-General/PRep — patchwerk-cloud + the Vault/runner path only exist
+# there. No-op (and green) on the public repo.
+
+on:
+  issues:
+    types: [opened, labeled]
+
+permissions:
+  issues: write
+
+jobs:
+  ping-patchwerk:
+    if: >-
+      github.repository == 'CBA-General/PRep' &&
+      contains(github.event.issue.labels.*.name, 'feedback')
+    runs-on: default
+    steps:
+      - name: Comment @patchwerk on the feedback issue
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+
+            // Avoid double-triggering (opened + labeled both fire).
+            const { data: comments } = await github.rest.issues.listComments({
+              owner, repo, issue_number, per_page: 100,
+            });
+            if (comments.some(c => c.body && c.body.includes('@patchwerk'))) {
+              core.notice('Already pinged @patchwerk — skipping.');
+              return;
+            }
+
+            const body = [
+              '@patchwerk',
+              '',
+              'Triage this PRep feedback. If it is a relevant, actionable bug or feature request, implement it and open a PR.',
+              'After implementing, run the `/verify-extension-feature` skill to load the built extension, capture Playwright screenshots of the change, and attach them to the PR as visual evidence. Do not mark the PR ready unless the screenshots show the feature working.',
+            ].join('\n');
+
+            await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            core.notice(`Pinged @patchwerk on #${issue_number}.`);
