@@ -57,6 +57,13 @@ function handlers(): CardHandlers {
       else requestExplain();
     },
     onAnswer: (idx) => grade(idx),
+    onNewQuestion: () => {
+      if (!active || active.kind !== "quiz") return;
+      // Drop the cached quiz for this file and regenerate a fresh one.
+      if (active.container) quizCache.delete(active.container);
+      active.quiz = null;
+      requestQuiz();
+    },
   };
 }
 
@@ -97,13 +104,13 @@ async function requestExplain(): Promise<void> {
     currentCard?.showError(String(e instanceof Error ? e.message : e), true);
     return;
   }
-  if (!currentCard) return; // closed while awaiting
+  if (!currentCard || !active || active.kind !== "explain") return; // closed while awaiting
   if (!resp || !resp.ok) {
     if (resp && resp.code === "NO_KEY") currentCard.showNeedsKey();
     else currentCard.showError((resp && resp.error) || "No response from the extension.", true);
     return;
   }
-  currentCard.showExplanation(resp.explanation);
+  currentCard.showExplanation(resp.explanation, active.payload.code);
 }
 
 function grade(idx: number): void {
@@ -177,12 +184,15 @@ function onClick(e: MouseEvent): void {
       showCachedQuiz(cached, container);
       return;
     }
-    const rows = selectors.getHunkRows(rowEl);
+    // Quiz covers the WHOLE file (all hunks), so a change that depends on code
+    // elsewhere in the same file is captured. Fall back to the clicked hunk if
+    // the file container can't be resolved.
+    const rows = container ? selectors.getFileRows(rowEl) : selectors.getHunkRows(rowEl);
     if (!rows.length) return;
-    const code = selectors.getHunkText(rowEl);
+    const code = container ? selectors.getRowsText(rows, 12000) : selectors.getHunkText(rowEl);
     if (!code) return;
     const info = selectors.getRowInfo(rowEl);
-    openQuiz(rows, { code, fileName: info.fileName, language: info.language, kind: info.kind }, container);
+    openQuiz(rows, { code, fileName: info.fileName, language: info.language, kind: "file changes" }, container);
     return;
   }
 
@@ -206,6 +216,48 @@ function onClick(e: MouseEvent): void {
 }
 
 // ---- mode toggle -------------------------------------------------------
+
+// Persistent top-right badge so the active mode is always visible (the toast
+// only flashes on change). Click it to toggle, same as the keyboard shortcut.
+let modeBadge: HTMLDivElement | null = null;
+
+function renderModeBadge(): void {
+  if (!modeBadge) return;
+  modeBadge.textContent = mode === "learn" ? "PRep · Learn" : "PRep · Quiz";
+  modeBadge.style.borderColor = mode === "learn" ? "#3fb950" : "#ff7a17";
+}
+
+function mountModeBadge(): void {
+  if (modeBadge) return;
+  const el = document.createElement("div");
+  el.id = "pq-mode-badge";
+  Object.assign(el.style, {
+    position: "fixed",
+    top: "60px",
+    right: "12px",
+    zIndex: "9997",
+    cursor: "pointer",
+    userSelect: "none",
+    background: "#0a0a0a",
+    color: "#ffffff",
+    border: "1px solid #ff7a17",
+    borderRadius: "9999px",
+    padding: "6px 12px",
+    font: '600 12px/1 ui-monospace, "Geist Mono", SFMono-Regular, Menlo, monospace',
+    letterSpacing: "0.5px",
+    boxShadow: "0 4px 12px rgba(0,0,0,.4)",
+  });
+  el.title = "Click or press Cmd/Ctrl+Shift+L to swap Quiz / Learn mode";
+  el.addEventListener("click", () => applyMode(mode === "quiz" ? "learn" : "quiz"));
+  document.body.appendChild(el);
+  modeBadge = el;
+  renderModeBadge();
+}
+
+function unmountModeBadge(): void {
+  modeBadge?.remove();
+  modeBadge = null;
+}
 
 let toastEl: HTMLDivElement | null = null;
 let toastTimer = 0;
@@ -242,6 +294,7 @@ function applyMode(m: Mode): void {
   mode = m;
   lastLearnRow = null;
   void chrome.storage.local.set({ prepMode: m });
+  renderModeBadge();
   showModeToast(m);
 }
 
@@ -275,6 +328,7 @@ function init(): void {
   hintStyle = document.createElement("style");
   hintStyle.textContent = ".blob-code-inner, .diff-text-inner { cursor: pointer; }";
   document.head.appendChild(hintStyle);
+  mountModeBadge();
 }
 
 function teardown(): void {
@@ -287,6 +341,7 @@ function teardown(): void {
     hintStyle = null;
   }
   lastLearnRow = null;
+  unmountModeBadge();
   closeCard();
   destroyExisting();
 }
@@ -305,3 +360,11 @@ document.addEventListener("turbo:render", init);
 document.addEventListener("turbo:load", init);
 document.addEventListener("pjax:end", init); // older GHES
 window.addEventListener("popstate", init);
+
+// GitHub's React "Files changed" view navigates client-side and does NOT always
+// fire the Turbo/pjax events above, leaving the extension inactive until a hard
+// refresh. The Navigation API fires on every client-side navigation (no polling)
+// and covers that case; init() is idempotent. Guarded for engines without it,
+// which still rely on the Turbo/popstate listeners above.
+const nav = (window as unknown as { navigation?: EventTarget }).navigation;
+nav?.addEventListener("navigatesuccess", init);
