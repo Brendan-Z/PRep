@@ -41,12 +41,15 @@ jobs:
       - run: bun install --frozen-lockfile
 
       - name: Triage and fix
-        uses: anthropics/claude-code-action@v1
+        # Org mirror of anthropics/claude-code-action (allowlisted in CBA-General).
+        # It wraps the Claude Code CLI — the prompt_file + allowedTools below ARE
+        # the pipeline; no skills required.
+        uses: CBA-General/claude-code-action@beta
         env:
           # Route Claude Code through the CBA Portkey gateway (Bedrock-backed).
-          # NOTE: validate the exact Anthropic-compatible base path + header set
-          # against the gateway (see src/background/portkey.ts) before relying on CI.
-          ANTHROPIC_BASE_URL: ${{ vars.PORTKEY_BASE_URL }}
+          # Confirmed CBA pattern: ANTHROPIC_BASE_URL=https://portkey.aipe.cba
+          # (ai-engineering mac-setup.sh). Default the var to that.
+          ANTHROPIC_BASE_URL: ${{ vars.PORTKEY_BASE_URL || 'https://portkey.aipe.cba' }}
           ANTHROPIC_CUSTOM_HEADERS: |
             x-portkey-api-key: ${{ secrets.PORTKEY_API_KEY }}
           ANTHROPIC_MODEL: ${{ vars.PORTKEY_MODEL }}
