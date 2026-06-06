@@ -15,10 +15,18 @@ const SYSTEM_PROMPT = [
   "EXACTLY ONE question asking what the code DOES (its behaviour/effect), with EXACTLY 4 options.",
   "Exactly one option is correct; the other three must be plausible-but-wrong distractors a junior",
   "might actually pick (e.g. mutation vs copy, off-by-one, sync vs async, truthy/falsy edge cases,",
-  "shallow vs deep, reference vs value). The explanation must break the code down in plain language",
-  "for a junior and say WHY the correct option is right and why the most tempting wrong option is",
-  "wrong — concise and concrete, no fluff. Base the question ONLY on the provided snippet; do not",
-  "invent surrounding code you cannot see.",
+  "shallow vs deep, reference vs value).",
+  // Option lettering + correctIndex consistency. A miscounted "option 1/2" in the
+  // prose contradicts the highlighted answer and confuses the reader.
+  "The four options are labelled A, B, C, D in the exact order you output them: A is options[0],",
+  "B is options[1], C is options[2], D is options[3]. correctIndex is 0-based, so 0=A, 1=B, 2=C, 3=D.",
+  "In the explanation, refer to options ONLY by their letter (A, B, C, D) — never by a number —",
+  "and keep every statement consistent with correctIndex: NEVER describe the correct option as wrong.",
+  "Structure the explanation as: first a brief plain-language summary of what the code does, then",
+  "exactly one line per option, each starting with 'Option A:', 'Option B:', 'Option C:', 'Option D:'",
+  "(in that order) stating whether that letter is correct or why it is wrong. Concise and concrete,",
+  "no fluff. Base the question ONLY on the provided snippet; do not invent surrounding code you",
+  "cannot see.",
 ].join(" ");
 
 function userMessage({ code, fileName, language, kind }: QuizPayload): string {
@@ -29,7 +37,7 @@ function userMessage({ code, fileName, language, kind }: QuizPayload): string {
 }
 
 // Pull a JSON object out of a model's text content (handles ```json fences / stray prose).
-function extractJson(text: unknown): unknown {
+export function extractJson(text: unknown): unknown {
   if (typeof text !== "string") return null;
   let t = text.trim();
   const fence = t.match(/```(?:json)?\s*([\s\S]*?)```/i);
@@ -51,7 +59,7 @@ function extractJson(text: unknown): unknown {
 }
 
 // Normalize OpenAI-compat message.content (string | null | array of blocks) to text.
-function contentToText(content: unknown): string {
+export function contentToText(content: unknown): string {
   if (typeof content === "string") return content;
   if (Array.isArray(content)) {
     return content
@@ -61,7 +69,7 @@ function contentToText(content: unknown): string {
   return "";
 }
 
-function safeParse(s: string): unknown {
+export function safeParse(s: string): unknown {
   try {
     return JSON.parse(s);
   } catch {

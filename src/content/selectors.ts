@@ -122,6 +122,44 @@ export function getHunkRows(row: Element): Element[] {
   return before.concat(after);
 }
 
+// The file container element for a row — used as a stable per-file cache key and
+// to bound shift+click ranges to a single file.
+export function getFileContainer(row: Element): Element | null {
+  return fileContainer(row, rowView(row));
+}
+
+// All code-line rows within a file container, in document order.
+function allCodeRows(container: Element, view: CodeView): Element[] {
+  const sel = view === "react" ? ".diff-line-row" : "tr";
+  return Array.from(container.querySelectorAll(sel)).filter((r) => isCodeRow(r, view));
+}
+
+// Inclusive range of code rows between two clicked rows in the SAME file. Used by
+// learn-mode shift+click. Returns [] if the rows are in different files.
+export function getRowRange(a: Element, b: Element): Element[] {
+  const view = rowView(a);
+  const container = fileContainer(a, view);
+  if (!container || fileContainer(b, view) !== container) return [];
+  const all = allCodeRows(container, view);
+  const ia = all.indexOf(a);
+  const ib = all.indexOf(b);
+  if (ia === -1 || ib === -1) return [];
+  const [lo, hi] = ia <= ib ? [ia, ib] : [ib, ia];
+  return all.slice(lo, hi + 1);
+}
+
+// Concatenated code text of an arbitrary set of rows (learn-mode line/block).
+export function getRowsText(rows: Element[]): string {
+  if (!rows.length) return "";
+  const view = rowView(rows[0]);
+  let text = rows
+    .map((r) => codeTextOfRow(r, view))
+    .join("\n")
+    .replace(new RegExp(String.fromCharCode(160), "g"), " ");
+  if (text.length > 4000) text = text.slice(0, 4000) + "\n… (truncated)";
+  return text.trim();
+}
+
 // Concatenated code text of the hunk containing `row`.
 export function getHunkText(row: Element): string {
   const view = rowView(row);

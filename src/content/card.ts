@@ -6,7 +6,7 @@
 // xAI design language: near-black canvas, white-pill interactives, hairline
 // borders, Inter body + monospace uppercase eyebrows. Dark only.
 
-import type { Quiz } from "../shared/quiz";
+import type { Quiz, Explanation } from "../shared/quiz";
 
 const HOST_ID = "pq-card-host";
 const BOX_ID = "pq-box";
@@ -35,6 +35,7 @@ export interface CardController {
   showLoading(): void;
   showQuestion(quiz: Quiz): void;
   showResult(result: QuizResult): void;
+  showExplanation(explanation: Explanation): void;
   showError(message: string, canRetry: boolean): void;
   showNeedsKey(): void;
 }
@@ -67,7 +68,7 @@ const CSS = `
   .opt {
     text-align: left; cursor: pointer; width: 100%;
     padding: 10px 14px; border: 1px solid #212327; border-radius: 9999px;
-    background: transparent; color: #dadbdf; font: inherit; display: flex; gap: 10px; align-items: baseline;
+    background: transparent; color: #dadbdf; font: inherit; display: flex; gap: 10px; align-items: center;
   }
   .opt:hover:not(:disabled) { background: #1a1c20; border-color: #363a3f; color: #ffffff; }
   .opt:disabled { cursor: default; }
@@ -92,6 +93,17 @@ const CSS = `
     background: #1a1c20; border: 1px solid #2a2d33; color: #ffb27a;
   }
   em { font-style: italic; color: #ffffff; }
+  .exlines { display: flex; flex-direction: column; gap: 12px; margin-top: 6px; }
+  .exline { border-left: 2px solid #ff7a17; padding-left: 12px; }
+  .exline pre {
+    margin: 0 0 6px; padding: 8px 10px; overflow-x: auto;
+    background: #141414; border: 1px solid #212327; border-radius: 6px;
+  }
+  .exline pre code {
+    background: none; border: none; padding: 0; color: #dadbdf;
+    font-size: 12.5px; line-height: 1.5; white-space: pre;
+  }
+  .exline .exp { margin: 0; color: #dadbdf; font-size: 14px; line-height: 1.5; }
   .muted { color: #7d8187; }
   .btn { cursor: pointer; padding: 8px 16px; border: 1px solid #212327; border-radius: 9999px; background: transparent; color: #ffffff; font: inherit; }
   .btn:hover { background: #1a1c20; }
@@ -122,7 +134,7 @@ function renderInline(s: string): string {
 // Explanations cram every option's verdict into one paragraph. Start each
 // "Option N …" clause on its own line so the reasoning is scannable.
 function renderExplanation(s: string): string {
-  return renderInline(s).replace(/\s+(Option\s+\d+\b)/g, "<br><br>$1");
+  return renderInline(s).replace(/\s+(Option\s+(?:[A-D]|\d+)\b)/g, "<br><br>$1");
 }
 
 function unionRect(rows: Element[]): { top: number; left: number; right: number; bottom: number } {
@@ -306,6 +318,20 @@ export function openCard(rows: Element[], handlers: CardHandlers = {}): CardCont
         ex.innerHTML = `<h5>Explanation</h5><p>${renderExplanation(result.explanation)}</p>`;
         body.appendChild(ex);
       }
+      reposition();
+    },
+
+    showExplanation(explanation: Explanation) {
+      const lines = explanation.lines
+        .map(
+          (l) =>
+            `<div class="exline"><pre><code>${escapeHtml(l.code)}</code></pre><p class="exp">${renderInline(l.explanation)}</p></div>`,
+        )
+        .join("");
+      card.innerHTML =
+        header("What does this do?") +
+        `<div class="body"><p class="q">${renderInline(explanation.summary)}</p><div class="exlines">${lines}</div></div>`;
+      wireClose();
       reposition();
     },
 
