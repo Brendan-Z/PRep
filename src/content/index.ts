@@ -19,6 +19,7 @@ import {
   type ExplainPayload,
 } from "../shared/messages";
 import type { Quiz } from "../shared/quiz";
+import { buildFeedbackUrl } from "../shared/feedback";
 
 type Mode = "quiz" | "learn";
 
@@ -93,6 +94,23 @@ function handlers(): CardHandlers {
       showCurrentQuestion();
     },
     onFinish: () => closeCard(),
+    // Open a prefilled GitHub issue in a new tab, carrying whatever the card is
+    // currently showing (file, language, code) so the triage automation has context.
+    onFeedback: () => {
+      const payload = active?.payload;
+      window.open(
+        buildFeedbackUrl({
+          version: chrome.runtime.getManifest().version,
+          mode,
+          pageUrl: location.href,
+          fileName: payload?.fileName,
+          language: payload?.language,
+          code: payload?.code,
+        }),
+        "_blank",
+        "noopener",
+      );
+    },
   };
 }
 
